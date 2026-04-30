@@ -304,7 +304,7 @@ with tab_plan:
   }}
   .kochplan td.leer {{ background-color: #F8F8F8; }}
   .kochplan .datum {{ font-size: 0.75em; color: #999999; display: block; margin-bottom: 2px; }}
-  .kochplan .name {{ font-weight: bold; display: block; }}
+  .kochplan .name {{ font-weight: bold; display: block; color: #000000; }}
   .kochplan .sonder {{ font-style: italic; color: #AAAAAA; display: block; }}
   .kochplan .manuell {{ color: #E07020; font-style: normal; font-size: 0.85em; }}
 </style>

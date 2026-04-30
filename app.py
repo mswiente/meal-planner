@@ -4,7 +4,7 @@ from dateutil.relativedelta import relativedelta
 import calendar
 
 from daten import lade_config, speichere_config, lade_historie, speichere_historie, str_zu_datum
-from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE
+from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE, elternteil_zu_kinder
 from pdf_export import erstelle_pdf
 
 st.set_page_config(page_title="Kindergarten Kochplan", page_icon="🍲", layout="wide")
@@ -43,7 +43,7 @@ with st.sidebar:
         config["einstellungen"]["startdatum"] = startdatum.isoformat()
 
     # --- Feiertage ---
-    with st.expander("Feiertage / Schließzeiten", expanded=False):
+    with st.expander("Feiertage (werden übersprungen)", expanded=False):
         feiertage_str = config["einstellungen"].get("feiertage", [])
         neuer_feiertag = st.date_input("Datum hinzufügen", key="neuer_feiertag")
         col1, col2 = st.columns(2)
@@ -60,6 +60,23 @@ with st.sidebar:
                 if c2.button("✕", key=f"del_ft_{ft}"):
                     feiertage_str.remove(ft)
                     config["einstellungen"]["feiertage"] = feiertage_str
+
+    # --- Schließtage ---
+    with st.expander("Schließtage (erscheinen im Plan)", expanded=False):
+        schliesztage_str = config["einstellungen"].get("schliesztage", [])
+        neuer_schliesztag = st.date_input("Datum hinzufügen", key="neuer_schliesztag")
+        if st.button("Hinzufügen", key="btn_schliesztag_add"):
+            if neuer_schliesztag.isoformat() not in schliesztage_str:
+                schliesztage_str.append(neuer_schliesztag.isoformat())
+                config["einstellungen"]["schliesztage"] = schliesztage_str
+        if schliesztage_str:
+            st.write("Eingetragene Schließtage:")
+            for st_tag in sorted(schliesztage_str):
+                c1, c2 = st.columns([3, 1])
+                c1.write(st_tag)
+                if c2.button("✕", key=f"del_sz_{st_tag}"):
+                    schliesztage_str.remove(st_tag)
+                    config["einstellungen"]["schliesztage"] = schliesztage_str
 
     # --- Gerichte ---
     with st.expander("Gerichte pro Wochentag", expanded=False):
@@ -212,6 +229,7 @@ with tab_plan:
 
         # Plan anzeigen und manuell bearbeiten
         eltern_namen = [""] + [e["name"] for e in config["eltern"]]
+        kind_mapping = elternteil_zu_kinder(config)
 
         # Nach Monaten gruppieren
         monate_gruppen: dict[str, list[int]] = {}
@@ -235,13 +253,24 @@ with tab_plan:
                 cols = st.columns([2, 2, 3, 3, 1])
                 cols[0].write(d.strftime("%d.%m.%Y"))
                 cols[1].write(eintrag["wochentag_name"])
+
+                if eintrag.get("ist_schliesztag"):
+                    cols[2].write("–")
+                    cols[3].markdown("*Schließtag*")
+                    cols[4].write("")
+                    continue
+
                 cols[2].write(eintrag["gericht"])
 
                 aktueller_elternteil = eintrag.get("elternteil", "")
+                kinder = kind_mapping.get(aktueller_elternteil, [])
+                kind_anzeige = ", ".join(kinder) if kinder else aktueller_elternteil
+
                 neuer_elternteil = cols[3].selectbox(
                     "Elternteil",
                     options=eltern_namen,
                     index=eltern_namen.index(aktueller_elternteil) if aktueller_elternteil in eltern_namen else 0,
+                    format_func=lambda name: ", ".join(kind_mapping.get(name, [])) if name and kind_mapping.get(name) else name,
                     key=f"select_{idx}",
                     label_visibility="collapsed",
                 )

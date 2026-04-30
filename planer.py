@@ -9,6 +9,14 @@ def _gewicht(elternteil: dict[str, Any]) -> float:
     return 0.5 if elternteil.get("ist_vorstand", False) else 1.0
 
 
+def elternteil_zu_kinder(config: dict[str, Any]) -> dict[str, list[str]]:
+    mapping: dict[str, list[str]] = {}
+    for kind in config.get("kinder", []):
+        for elternteil in kind.get("eltern", []):
+            mapping.setdefault(elternteil, []).append(kind["name"])
+    return mapping
+
+
 def generiere_plan(
     config: dict[str, Any],
     historie: dict[str, int],
@@ -17,6 +25,9 @@ def generiere_plan(
 ) -> list[dict[str, Any]]:
     feiertage = {
         date.fromisoformat(d) for d in config["einstellungen"].get("feiertage", [])
+    }
+    schliesztage = {
+        date.fromisoformat(d) for d in config["einstellungen"].get("schliesztage", [])
     }
     gerichte: dict[str, str] = config["gerichte"]
     eltern: list[dict[str, Any]] = config["eltern"]
@@ -30,36 +41,55 @@ def generiere_plan(
 
     while aktuelles_datum <= enddatum:
         wochentag = aktuelles_datum.weekday()
-        if wochentag < 5 and aktuelles_datum not in feiertage:
-            gericht = gerichte.get(str(wochentag), "")
-            sperrzeiten_eltern = {
-                e["name"]
-                for e in eltern
-                if aktuelles_datum.isoformat() in e.get("sperrzeiten", [])
-            }
-            kandidaten = [
-                e
-                for e in eltern
-                if _ist_verfuegbar(e, wochentag, aktuelles_datum, sperrzeiten_eltern)
-            ]
+        if wochentag >= 5:
+            aktuelles_datum += timedelta(days=1)
+            continue
 
-            if kandidaten:
-                bester = min(kandidaten, key=lambda e: zaehler.get(e["name"], 0.0))
-                zaehler[bester["name"]] = zaehler.get(bester["name"], 0.0) + 1.0 / _gewicht(bester)
-                elternteil_name = bester["name"]
-            else:
-                elternteil_name = ""
+        if aktuelles_datum in feiertage:
+            aktuelles_datum += timedelta(days=1)
+            continue
 
-            plan.append(
-                {
-                    "datum": aktuelles_datum.isoformat(),
-                    "wochentag": wochentag,
-                    "wochentag_name": WOCHENTAGE[wochentag],
-                    "gericht": gericht,
-                    "elternteil": elternteil_name,
-                    "manuell_geaendert": False,
-                }
-            )
+        if aktuelles_datum in schliesztage:
+            plan.append({
+                "datum": aktuelles_datum.isoformat(),
+                "wochentag": wochentag,
+                "wochentag_name": WOCHENTAGE[wochentag],
+                "gericht": "",
+                "elternteil": "",
+                "ist_schliesztag": True,
+                "manuell_geaendert": False,
+            })
+            aktuelles_datum += timedelta(days=1)
+            continue
+
+        gericht = gerichte.get(str(wochentag), "")
+        sperrzeiten_eltern = {
+            e["name"]
+            for e in eltern
+            if aktuelles_datum.isoformat() in e.get("sperrzeiten", [])
+        }
+        kandidaten = [
+            e
+            for e in eltern
+            if _ist_verfuegbar(e, wochentag, aktuelles_datum, sperrzeiten_eltern)
+        ]
+
+        if kandidaten:
+            bester = min(kandidaten, key=lambda e: zaehler.get(e["name"], 0.0))
+            zaehler[bester["name"]] = zaehler.get(bester["name"], 0.0) + 1.0 / _gewicht(bester)
+            elternteil_name = bester["name"]
+        else:
+            elternteil_name = ""
+
+        plan.append({
+            "datum": aktuelles_datum.isoformat(),
+            "wochentag": wochentag,
+            "wochentag_name": WOCHENTAGE[wochentag],
+            "gericht": gericht,
+            "elternteil": elternteil_name,
+            "ist_schliesztag": False,
+            "manuell_geaendert": False,
+        })
         aktuelles_datum += timedelta(days=1)
 
     return plan
@@ -82,6 +112,8 @@ def _ist_verfuegbar(
 def berechne_einsaetze(plan: list[dict[str, Any]]) -> dict[str, int]:
     zaehler: dict[str, int] = {}
     for eintrag in plan:
+        if eintrag.get("ist_schliesztag"):
+            continue
         name = eintrag.get("elternteil", "")
         if name:
             zaehler[name] = zaehler.get(name, 0) + 1
@@ -94,24 +126,22 @@ def validiere_plan(
     eltern_map = {e["name"]: e for e in config["eltern"]}
     warnungen = []
     for eintrag in plan:
+        if eintrag.get("ist_schliesztag"):
+            continue
         name = eintrag.get("elternteil", "")
         if not name:
-            warnungen.append(
-                {
-                    "datum": eintrag["datum"],
-                    "meldung": f"Kein Elternteil für {eintrag['wochentag_name']}, {eintrag['datum']} zugewiesen.",
-                }
-            )
+            warnungen.append({
+                "datum": eintrag["datum"],
+                "meldung": f"Kein Elternteil für {eintrag['wochentag_name']}, {eintrag['datum']} zugewiesen.",
+            })
             continue
         elternteil = eltern_map.get(name)
         if not elternteil:
             continue
         erlaubte = elternteil.get("erlaubte_wochentage", [])
         if erlaubte and eintrag["wochentag"] not in erlaubte:
-            warnungen.append(
-                {
-                    "datum": eintrag["datum"],
-                    "meldung": f"{name} ist am {eintrag['wochentag_name']} ({eintrag['datum']}) nicht verfügbar (erlaubte Tage: {[WOCHENTAGE[t] for t in erlaubte]}).",
-                }
-            )
+            warnungen.append({
+                "datum": eintrag["datum"],
+                "meldung": f"{name} ist am {eintrag['wochentag_name']} ({eintrag['datum']}) nicht verfügbar (erlaubte Tage: {[WOCHENTAGE[t] for t in erlaubte]}).",
+            })
     return warnungen

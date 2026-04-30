@@ -12,6 +12,7 @@ STANDARD_CONFIG: dict[str, Any] = {
         "planungsmonate": 3,
         "startdatum": date.today().isoformat(),
         "feiertage": [],
+        "schliesztage": [],
     },
     "gerichte": {
         "0": "Kartoffelgericht",

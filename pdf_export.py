@@ -17,6 +17,8 @@ from reportlab.platypus import (
 )
 from reportlab.pdfbase import pdfmetrics
 
+from planer import elternteil_zu_kinder
+
 WOCHENTAGE_KURZ = ["Mo", "Di", "Mi", "Do", "Fr"]
 WOCHENTAGE_LANG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
 
@@ -78,6 +80,9 @@ def erstelle_pdf(
         date.fromisoformat(d): True
         for d in config["einstellungen"].get("feiertage", [])
     }
+
+    # Elternteil → Kinder-Mapping
+    kind_mapping = elternteil_zu_kinder(config)
 
     # Plan nach Datum indizieren
     plan_index: dict[str, dict[str, Any]] = {e["datum"]: e for e in plan}
@@ -142,22 +147,21 @@ def erstelle_pdf(
             eintrag = plan_index.get(datum_str)
 
             if eintrag is None:
-                # Tag liegt außerhalb des Planungszeitraums
+                # Tag liegt außerhalb des Planungszeitraums oder ist Feiertag
                 zeile.append(Paragraph("", styles["Normal"]))
-            elif tag in feiertage or not eintrag:
-                # Feiertag oder kein Eintrag
-                name = eintrag.get("elternteil", "") if eintrag else ""
-                anzeige = name if name else "–"
+            elif eintrag.get("ist_schliesztag"):
                 inhalt_zelle = [
                     Paragraph(tag.strftime("%d.%m.%Y"), zellen_datum_stil),
-                    Paragraph(anzeige, zellen_sonder_stil),
+                    Paragraph("Schließtag", zellen_sonder_stil),
                 ]
                 zeile.append(inhalt_zelle)
             else:
-                name = eintrag.get("elternteil", "")
+                elternteil_name = eintrag.get("elternteil", "")
+                kinder = kind_mapping.get(elternteil_name, [])
+                anzeige = ", ".join(kinder) if kinder else elternteil_name if elternteil_name else "–"
                 inhalt_zelle = [
                     Paragraph(tag.strftime("%d.%m.%Y"), zellen_datum_stil),
-                    Paragraph(name if name else "–", zellen_name_stil),
+                    Paragraph(anzeige, zellen_name_stil),
                 ]
                 zeile.append(inhalt_zelle)
 

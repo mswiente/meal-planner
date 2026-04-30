@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from typing import Any
 
+from daten import schliesszeit_daten
 
 WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
 
@@ -15,12 +16,7 @@ def generiere_plan(
     startdatum: date,
     enddatum: date,
 ) -> list[dict[str, Any]]:
-    feiertage = {
-        date.fromisoformat(d) for d in config["einstellungen"].get("feiertage", [])
-    }
-    schliesztage = {
-        date.fromisoformat(d) for d in config["einstellungen"].get("schliesztage", [])
-    }
+    schliesszeiten = schliesszeit_daten(config)
     gerichte: dict[str, str] = config["gerichte"]
     kinder: list[dict[str, Any]] = config["kinder"]
 
@@ -37,18 +33,15 @@ def generiere_plan(
             aktuelles_datum += timedelta(days=1)
             continue
 
-        if aktuelles_datum in feiertage:
-            aktuelles_datum += timedelta(days=1)
-            continue
-
-        if aktuelles_datum in schliesztage:
+        sz_name = schliesszeiten.get(aktuelles_datum.isoformat())
+        if sz_name is not None:
             plan.append({
                 "datum": aktuelles_datum.isoformat(),
                 "wochentag": wochentag,
                 "wochentag_name": WOCHENTAGE[wochentag],
                 "gericht": "",
                 "kind": "",
-                "ist_schliesztag": True,
+                "schliesszeit_name": sz_name,
                 "manuell_geaendert": False,
             })
             aktuelles_datum += timedelta(days=1)
@@ -78,7 +71,7 @@ def generiere_plan(
             "wochentag_name": WOCHENTAGE[wochentag],
             "gericht": gericht,
             "kind": kind_name,
-            "ist_schliesztag": False,
+            "schliesszeit_name": "",
             "manuell_geaendert": False,
         })
         aktuelles_datum += timedelta(days=1)
@@ -102,7 +95,7 @@ def _ist_verfuegbar(
 def berechne_einsaetze(plan: list[dict[str, Any]]) -> dict[str, int]:
     zaehler: dict[str, int] = {}
     for eintrag in plan:
-        if eintrag.get("ist_schliesztag"):
+        if eintrag.get("schliesszeit_name"):
             continue
         name = eintrag.get("kind", "")
         if name:
@@ -116,7 +109,7 @@ def validiere_plan(
     kinder_map = {k["name"]: k for k in config["kinder"]}
     warnungen = []
     for eintrag in plan:
-        if eintrag.get("ist_schliesztag"):
+        if eintrag.get("schliesszeit_name"):
             continue
         name = eintrag.get("kind", "")
         if not name:

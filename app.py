@@ -2,8 +2,18 @@ import os
 import streamlit as st
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
+import holidays as holidays_lib
 
 from daten import lade_config, speichere_config, lade_historie, speichere_historie, str_zu_datum, DATEN_VERZEICHNIS
+
+BUNDESLAENDER = {
+    "BB": "Brandenburg", "BE": "Berlin", "BW": "Baden-Württemberg",
+    "BY": "Bayern", "HB": "Bremen", "HE": "Hessen", "HH": "Hamburg",
+    "MV": "Mecklenburg-Vorpommern", "NI": "Niedersachsen",
+    "NW": "Nordrhein-Westfalen", "RP": "Rheinland-Pfalz",
+    "SH": "Schleswig-Holstein", "SL": "Saarland", "SN": "Sachsen",
+    "ST": "Sachsen-Anhalt", "TH": "Thüringen",
+}
 from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE
 from pdf_export import erstelle_pdf
 
@@ -41,39 +51,74 @@ with st.sidebar:
         config["einstellungen"]["planungsmonate"] = planungsmonate
         config["einstellungen"]["startdatum"] = startdatum.isoformat()
 
-    # --- Feiertage ---
-    with st.expander("Feiertage (werden übersprungen)", expanded=False):
-        feiertage_str = config["einstellungen"].get("feiertage", [])
-        neuer_feiertag = st.date_input("Datum hinzufügen", key="neuer_feiertag")
-        if st.button("Hinzufügen", key="btn_feiertag_add"):
-            if neuer_feiertag.isoformat() not in feiertage_str:
-                feiertage_str.append(neuer_feiertag.isoformat())
-                config["einstellungen"]["feiertage"] = feiertage_str
-        if feiertage_str:
-            st.write("Eingetragene Tage:")
-            for ft in sorted(feiertage_str):
-                c1, c2 = st.columns([3, 1])
-                c1.write(ft)
-                if c2.button("✕", key=f"del_ft_{ft}"):
-                    feiertage_str.remove(ft)
-                    config["einstellungen"]["feiertage"] = feiertage_str
+    # --- Schließzeiten ---
+    with st.expander("Schließzeiten", expanded=False):
+        schliesszeiten: list[dict] = config["einstellungen"].get("schliesszeiten", [])
 
-    # --- Schließtage ---
-    with st.expander("Schließtage (erscheinen im Plan)", expanded=False):
-        schliesztage_str = config["einstellungen"].get("schliesztage", [])
-        neuer_schliesztag = st.date_input("Datum hinzufügen", key="neuer_schliesztag")
-        if st.button("Hinzufügen", key="btn_schliesztag_add"):
-            if neuer_schliesztag.isoformat() not in schliesztage_str:
-                schliesztage_str.append(neuer_schliesztag.isoformat())
-                config["einstellungen"]["schliesztage"] = schliesztage_str
-        if schliesztage_str:
-            st.write("Eingetragene Schließtage:")
-            for sz in sorted(schliesztage_str):
-                c1, c2 = st.columns([3, 1])
-                c1.write(sz)
-                if c2.button("✕", key=f"del_sz_{sz}"):
-                    schliesztage_str.remove(sz)
-                    config["einstellungen"]["schliesztage"] = schliesztage_str
+        # Bundesland + automatische Feiertagsgenerierung
+        bundesland_optionen = list(BUNDESLAENDER.keys())
+        bundesland_aktuell = config["einstellungen"].get("bundesland", "HE")
+        bundesland_idx = bundesland_optionen.index(bundesland_aktuell) if bundesland_aktuell in bundesland_optionen else 0
+        bl = st.selectbox(
+            "Bundesland",
+            options=bundesland_optionen,
+            index=bundesland_idx,
+            format_func=lambda k: f"{k} – {BUNDESLAENDER[k]}",
+            key="bundesland_select",
+        )
+        config["einstellungen"]["bundesland"] = bl
+
+        feiertag_jahr = st.number_input(
+            "Jahr für Feiertage", min_value=2020, max_value=2040,
+            value=date.today().year, step=1, key="feiertag_jahr",
+        )
+        if st.button("Feiertage generieren", key="btn_feiertage_gen"):
+            feiertage_dict = holidays_lib.Germany(subdiv=bl, years=int(feiertag_jahr))
+            bestehende_namen = {(sz["von"], sz["name"]) for sz in schliesszeiten}
+            neu = 0
+            for ft_datum, ft_name in sorted(feiertage_dict.items()):
+                key = (ft_datum.isoformat(), ft_name)
+                if key not in bestehende_namen:
+                    schliesszeiten.append({
+                        "name": ft_name,
+                        "von": ft_datum.isoformat(),
+                        "bis": ft_datum.isoformat(),
+                        "automatisch": True,
+                    })
+                    neu += 1
+            config["einstellungen"]["schliesszeiten"] = schliesszeiten
+            st.success(f"{neu} Feiertage für {bl} {int(feiertag_jahr)} hinzugefügt.")
+
+        st.divider()
+
+        # Manuell hinzufügen
+        with st.form("neue_schliesszeit", clear_on_submit=True):
+            sz_name = st.text_input("Bezeichnung (z.B. Sommerferien)")
+            sz_von = st.date_input("Von", key="sz_von")
+            sz_bis = st.date_input("Bis", key="sz_bis")
+            if st.form_submit_button("Hinzufügen"):
+                if sz_name:
+                    schliesszeiten.append({
+                        "name": sz_name,
+                        "von": sz_von.isoformat(),
+                        "bis": sz_bis.isoformat(),
+                        "automatisch": False,
+                    })
+                    config["einstellungen"]["schliesszeiten"] = schliesszeiten
+                    st.success(f'"{sz_name}" hinzugefügt.')
+
+        # Liste anzeigen
+        if schliesszeiten:
+            st.write("**Eingetragene Schließzeiten:**")
+            for i, sz in enumerate(sorted(schliesszeiten, key=lambda x: x["von"])):
+                zeitraum = sz["von"] if sz["von"] == sz["bis"] else f"{sz['von']} – {sz['bis']}"
+                auto_label = " 🗓" if sz.get("automatisch") else ""
+                c1, c2 = st.columns([4, 1])
+                c1.write(f"**{sz['name']}**{auto_label}  \n{zeitraum}")
+                if c2.button("✕", key=f"del_sz_{i}_{sz['von']}"):
+                    schliesszeiten.remove(sz)
+                    config["einstellungen"]["schliesszeiten"] = schliesszeiten
+                    st.rerun()
 
     # --- Gerichte ---
     with st.expander("Gerichte pro Wochentag", expanded=False):
@@ -214,7 +259,6 @@ with tab_plan:
             st.success("Einsätze zur Historie hinzugefügt.")
 
         # Plan anzeigen: wochenweise HTML-Tabelle
-        feiertage_set = {d for d in config["einstellungen"].get("feiertage", [])}
         gerichte = config.get("gerichte", {})
         plan_index = {e["datum"]: e for e in plan}
 
@@ -242,17 +286,13 @@ with tab_plan:
             for tag in woche:
                 datum_str = tag.isoformat()
                 eintrag = plan_index.get(datum_str)
-                if datum_str in feiertage_set:
-                    zellen += (
-                        f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
-                        f'<span class="sonder">Feiertag</span></td>'
-                    )
-                elif eintrag is None:
+                if eintrag is None:
                     zellen += '<td class="leer"></td>'
-                elif eintrag.get("ist_schliesztag"):
+                elif eintrag.get("schliesszeit_name"):
+                    sz_anzeige = eintrag["schliesszeit_name"]
                     zellen += (
                         f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
-                        f'<span class="sonder">Schließtag</span></td>'
+                        f'<span class="sonder">{sz_anzeige}</span></td>'
                     )
                 else:
                     kind_name = eintrag.get("kind", "")
@@ -299,7 +339,7 @@ with tab_plan:
         kinder_namen = [""] + [k["name"] for k in config["kinder"]]
         with st.expander("Plan manuell bearbeiten", expanded=False):
             for idx, eintrag in enumerate(plan):
-                if eintrag.get("ist_schliesztag"):
+                if eintrag.get("schliesszeit_name"):
                     continue
                 d = date.fromisoformat(eintrag["datum"])
                 cols = st.columns([2, 2, 3, 3, 1])

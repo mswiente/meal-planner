@@ -75,10 +75,6 @@ def erstelle_pdf(
     )
 
     gerichte = config.get("gerichte", {})
-    feiertage = {
-        date.fromisoformat(d): True
-        for d in config["einstellungen"].get("feiertage", [])
-    }
 
     # Plan nach Datum indizieren
     plan_index: dict[str, dict[str, Any]] = {e["datum"]: e for e in plan}
@@ -166,12 +162,11 @@ def erstelle_pdf(
             eintrag = plan_index.get(datum_str)
 
             if eintrag is None:
-                # Tag liegt außerhalb des Planungszeitraums oder ist Feiertag
                 zeile.append(Paragraph("", styles["Normal"]))
-            elif eintrag.get("ist_schliesztag"):
+            elif eintrag.get("schliesszeit_name"):
                 inhalt_zelle = [
                     Paragraph(tag.strftime("%d.%m.%Y"), zellen_datum_stil),
-                    Paragraph("Schließtag", zellen_sonder_stil),
+                    Paragraph(eintrag["schliesszeit_name"], zellen_sonder_stil),
                 ]
                 zeile.append(inhalt_zelle)
             else:

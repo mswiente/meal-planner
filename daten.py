@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 DATEN_VERZEICHNIS = os.path.join(os.path.dirname(__file__), "daten")
@@ -11,8 +11,8 @@ STANDARD_CONFIG: dict[str, Any] = {
     "einstellungen": {
         "planungsmonate": 3,
         "startdatum": date.today().isoformat(),
-        "feiertage": [],
-        "schliesztage": [],
+        "bundesland": "HE",
+        "schliesszeiten": [],
     },
     "gerichte": {
         "0": "Kartoffelgericht",
@@ -55,6 +55,19 @@ def speichere_historie(historie: dict[str, int]) -> None:
     _sicherstellen_verzeichnis()
     with open(HISTORIE_DATEI, "w", encoding="utf-8") as f:
         json.dump(historie, f, ensure_ascii=False, indent=2)
+
+
+def schliesszeit_daten(config: dict[str, Any]) -> dict[str, str]:
+    """Expandiert alle Schließzeiten-Zeiträume zu einem Dict {datum_iso: name}."""
+    lookup: dict[str, str] = {}
+    for sz in config["einstellungen"].get("schliesszeiten", []):
+        von = datetime.fromisoformat(sz["von"]).date()
+        bis = datetime.fromisoformat(sz["bis"]).date()
+        aktuell = von
+        while aktuell <= bis:
+            lookup[aktuell.isoformat()] = sz["name"]
+            aktuell += timedelta(days=1)
+    return lookup
 
 
 def datum_zu_str(d: date) -> str:

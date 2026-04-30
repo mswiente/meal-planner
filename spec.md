@@ -2,7 +2,7 @@
 
 ## Überblick
 
-Ein Tool zur Erstellung und Verwaltung von Kochplänen für den Kindergarten, bei dem Eltern reihum das Mittagessen für die Gruppe zubereiten.
+Ein Tool zur Erstellung und Verwaltung von Kochplänen für den Kindergarten, bei dem Eltern reihum das Mittagessen für die Gruppe zubereiten. Implementierung als **Streamlit-App** (Option D).
 
 ---
 
@@ -22,14 +22,14 @@ Ein Tool zur Erstellung und Verwaltung von Kochplänen für den Kindergarten, be
 #### 1.2 Kinder
 - Jedes Kind wird mit Name und zugehörigen Eltern/Erziehungsberechtigten erfasst.
 - Die Kinderliste ist konfigurierbar (hinzufügen, entfernen, bearbeiten).
+- Geschwisterkinder werden nicht gesondert behandelt.
 
 #### 1.3 Eltern
 - Eltern werden einem oder mehreren Kindern zugeordnet.
 - Pro Elternteil können folgende Regeln konfiguriert werden:
   - **Erlaubte Wochentage**: Das Elternteil kann nur an bestimmten Tagen eingeplant werden (z.B. nur Mo, Mi, Fr).
   - **Vorstandsmitglied**: Vorstandsmitglieder werden nur halb so häufig eingeplant wie andere Eltern.
-  - **Ausschlusszeiten**: Zeiträume (Urlaub, Krankheit etc.), in denen das Elternteil nicht eingeplant werden soll.
-  - **Geschwisterkinder**: Haben mehrere Kinder eines Elternteils denselben Elternteil, zählt dieser nur einmal.
+  - **Ausschlusszeiten**: Zeiträume (Urlaub etc.), in denen das Elternteil nicht eingeplant werden soll.
 
 ---
 
@@ -45,7 +45,7 @@ Ein Tool zur Erstellung und Verwaltung von Kochplänen für den Kindergarten, be
 - Gewichtungsregeln:
   - Vorstandsmitglieder erhalten Gewicht 0,5 (halb so oft).
   - Eltern mit eingeschränkten Wochentagen werden nur an erlaubten Tagen eingeplant.
-  - Der Algorithmus berücksichtigt bereits absolvierte Kocheinsätze aus früheren Planungsperioden (optional: Carry-over-Zähler).
+- **Historische Pläne werden berücksichtigt**: Einsatzzähler aus vergangenen Planungsperioden fließen in die Verteilung ein, sodass langfristig eine faire Gleichverteilung entsteht (Carry-over-Zähler).
 
 #### 2.3 Manuelle Anpassung
 - Jeder automatisch generierte Eintrag kann manuell geändert werden.
@@ -60,86 +60,58 @@ Ein Tool zur Erstellung und Verwaltung von Kochplänen für den Kindergarten, be
 - Der fertige Plan wird als PDF exportiert.
 - Inhalt des PDFs:
   - Monatsübersicht mit Datum, Wochentag, Gericht und eingeplantem Elternteil.
-  - Optionale Kontaktdaten der Eltern (E-Mail/Telefon).
-  - Legende mit Regeln und Farbcodes.
+  - Kontaktdaten der Eltern (Telefon).
+  - Legende mit Hinweisen zu Sonderregeln.
 
 #### 3.2 Weitere Exportformate (optional)
 - CSV/Excel für Weiterverarbeitung.
-- Druckfreundliche HTML-Ansicht.
 
 ---
 
-### 4. Benutzeroberfläche und Implementierungsalternativen
+### 4. Implementierung: Streamlit-App
 
-#### Option A: Excel/LibreOffice Calc (einfachste Lösung)
-- **Konfiguration**: Stammdaten in Tabellenblättern (`Kinder`, `Eltern`, `Gerichte`, `Einstellungen`).
-- **Planung**: Ein Makro (VBA/Basic) generiert den Plan automatisch in einem weiteren Tabellenblatt.
-- **Manuelle Anpassung**: Direkt in der Tabelle.
-- **PDF-Export**: Über eingebaute Excel/Calc-Funktion.
-- **Vorteile**: Keine Installation, bekannte Oberfläche, offline nutzbar.
-- **Nachteile**: Makros müssen aktiviert werden, eingeschränkte Darstellung, Wartung komplex.
-
-#### Option B: Python-CLI mit YAML-Konfiguration (flexibelste Lösung)
-- **Konfiguration**: YAML-Dateien für Gerichte, Kinder, Eltern und Regeln.
-- **Planung**: Python-Skript generiert Plan und schreibt Ergebnis in YAML/CSV.
-- **Manuelle Anpassung**: Direkte Bearbeitung der generierten YAML/CSV-Datei.
-- **PDF-Export**: Via `reportlab` oder `weasyprint`.
-- **Vorteile**: Sehr flexibel, gut erweiterbar, versionierbar (Git), keine GUI nötig.
-- **Nachteile**: Erfordert Python-Installation, weniger zugänglich für nicht-technische Nutzer.
-
-#### Option C: Web-App (benutzerfreundlichste Lösung)
-- **Stack**: Python (FastAPI/Flask) Backend + einfaches HTML/JS Frontend oder ein Framework wie Streamlit.
-- **Konfiguration**: Formulare im Browser.
-- **Planung**: Server-seitig, Ergebnis wird im Browser angezeigt.
-- **Manuelle Anpassung**: Direkt im Browser via Drag-and-Drop oder Dropdown.
-- **PDF-Export**: Server-seitig generiert, Download-Link.
-- **Vorteile**: Sehr zugänglich, kein lokales Setup für Endnutzer.
-- **Nachteile**: Erfordert Hosting oder lokalen Server, mehr Entwicklungsaufwand.
-
-#### Option D: Streamlit-App (guter Kompromiss)
 - **Stack**: Python + Streamlit (läuft lokal, öffnet sich im Browser).
-- **Konfiguration**: Seitenleiste mit Formularen.
-- **Planung**: Automatisch bei Konfigurationsänderung.
-- **Manuelle Anpassung**: Interaktive Tabelle im Browser.
+- **Sprache**: Deutsch (gesamte Benutzeroberfläche).
+- **Konfiguration**: Seitenleiste mit Formularen für Gerichte, Kinder, Eltern und Einstellungen.
+- **Planung**: Plan wird auf Knopfdruck generiert und als interaktive Tabelle angezeigt.
+- **Manuelle Anpassung**: Dropdown je Zeile zum Ändern des zugewiesenen Elternteils.
 - **PDF-Export**: Download-Button.
-- **Vorteile**: Einfache Installation (`pip install streamlit`), gute UX, kein Hosting nötig.
-- **Nachteile**: Erfordert Python, Streamlit muss installiert sein.
+- **Datenpersistenz**: Konfiguration und historische Pläne werden lokal als JSON-Dateien gespeichert.
 
 ---
 
 ### 5. Datenmodell
 
 ```
-Kindergarten
-├── settings
-│   ├── planning_months: int          # Planungszeitraum in Monaten
-│   ├── start_date: date
-│   └── holidays: list[date]
-│
-├── dishes
-│   └── weekday_dishes: dict          # {0: "Kartoffeln", 1: "Polenta", ...}
-│
-├── children
-│   └── Child
-│       ├── name: str
-│       └── parents: list[Parent]
-│
-└── parents
-    └── Parent
-        ├── name: str
-        ├── contact: str              # E-Mail oder Telefon
-        ├── allowed_weekdays: list[int]  # 0=Mo..4=Fr, leer = alle
-        ├── is_board_member: bool     # Vorstandsmitglied → halbe Häufigkeit
-        ├── weight: float             # abgeleitet: 0.5 wenn Vorstand, sonst 1.0
-        └── unavailable_dates: list[date]
+Einstellungen
+├── planungsmonate: int               # Planungszeitraum in Monaten (Standard: 3)
+├── startdatum: date
+└── feiertage: list[date]
 
-Plan
-└── PlanEntry
-    ├── date: date
-    ├── weekday: int
-    ├── dish: str
-    ├── parent: Parent
-    └── is_manual_override: bool
+Gerichte
+└── wochentag_gerichte: dict          # {0: "Kartoffeln", 1: "Polenta", ...}
+
+Kind
+├── name: str
+└── eltern: list[str]                 # Verweise auf Eltern-Namen
+
+Elternteil
+├── name: str
+├── telefon: str
+├── erlaubte_wochentage: list[int]    # 0=Mo..4=Fr, leer = alle erlaubt
+├── ist_vorstand: bool                # → Gewicht 0.5, sonst 1.0
+└── sperrzeiten: list[date]
+
+Planeintrag
+├── datum: date
+├── wochentag: int
+├── gericht: str
+├── elternteil: str
+└── manuell_geaendert: bool
+
+HistorischerEinsatz
+├── elternteil: str
+└── anzahl_einsaetze: int             # Carry-over aus abgeschlossenen Plänen
 ```
 
 ---
@@ -147,39 +119,46 @@ Plan
 ### 6. Verteilungsalgorithmus (Pseudocode)
 
 ```
+Lade historische Einsatzzähler aus gespeicherten abgeschlossenen Plänen.
+
 Für jeden Planungstag t im Zeitraum:
   1. Wenn t ein Feiertag oder Schließtag → überspringen
   2. Wochentag w = weekday(t)
-  3. Gericht = dishes[w]
+  3. Gericht = wochentag_gerichte[w]
   4. Kandidaten = [p für p in Eltern wenn:
-       - w in p.allowed_weekdays (oder p.allowed_weekdays leer)
-       - t nicht in p.unavailable_dates]
-  5. Wähle Kandidat mit niedrigstem Wert:
-       score(p) = bisherige_einsätze(p) / p.weight
+       - w in p.erlaubte_wochentage (oder Liste leer)
+       - t nicht in p.sperrzeiten]
+  5. Wähle Kandidat mit niedrigstem Score:
+       score(p) = gesamteinsaetze(p) / p.gewicht
+       (gesamteinsaetze = historische Einsätze + Einsätze im aktuellen Plan)
   6. Weise t → gewählter Kandidat zu
-  7. bisherige_einsätze(p) += 1
+  7. gesamteinsaetze(p) += 1
 ```
 
 ---
 
-### 7. Empfehlung
+### 7. Projektstruktur
 
-Für einen Kindergarten mit nicht-technischen Nutzern empfehle ich **Option D (Streamlit)**:
-- Einfache Installation mit einem Befehl.
-- Intuitive Browser-Oberfläche.
-- Konfiguration per Formulare, kein Texteditor nötig.
-- PDF-Export mit einem Klick.
-- Kann lokal auf dem Laptop des Koordinators laufen.
-
-Als Zwischenlösung oder Fallback eignet sich **Option A (Excel)**, wenn keine Python-Installation möglich ist.
+```
+meal-planner/
+├── app.py                  # Streamlit-Hauptanwendung
+├── planer.py               # Planungslogik und Algorithmus
+├── daten.py                # Laden/Speichern von JSON-Daten
+├── pdf_export.py           # PDF-Generierung
+├── daten/
+│   ├── config.json         # Gerichte, Kinder, Eltern, Einstellungen
+│   └── historie.json       # Historische Einsatzzähler
+├── requirements.txt
+└── spec.md
+```
 
 ---
 
-### 8. Offene Punkte / Entscheidungsbedarf
+### 8. Entschiedene Punkte
 
-- [ ] Sollen Eltern per E-Mail über ihren Kocheinsatz benachrichtigt werden?
-- [ ] Soll der Plan öffentlich (z.B. als Aushang) oder nur intern genutzt werden?
-- [ ] Wie soll mit krankheitsbedingten Ausfällen umgegangen werden (Ersatzplanung)?
-- [ ] Sollen historische Pläne archiviert und bei der nächsten Planung berücksichtigt werden?
-- [ ] Welche Sprache soll die Benutzeroberfläche haben (Deutsch)?
-- [ ] Sollen Geschwisterkinder besonders behandelt werden (ein Elternteil für mehrere Kinder)?
+- [x] Sprache: Deutsch
+- [x] Implementierung: Streamlit (Option D)
+- [x] Historische Pläne werden für die Verteilung berücksichtigt (Carry-over)
+- [x] Geschwisterkinder: keine Sonderbehandlung
+- [x] Ausfallmanagement: manuell per WhatsApp, keine App-Unterstützung nötig
+- [x] E-Mail-Benachrichtigung: nicht im ersten Schritt

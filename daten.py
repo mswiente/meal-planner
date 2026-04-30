@@ -22,7 +22,6 @@ STANDARD_CONFIG: dict[str, Any] = {
         "4": "Suppe",
     },
     "kinder": [],
-    "eltern": [],
 }
 
 

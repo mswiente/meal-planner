@@ -2,10 +2,9 @@ import os
 import streamlit as st
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
-import calendar
 
 from daten import lade_config, speichere_config, lade_historie, speichere_historie, str_zu_datum, DATEN_VERZEICHNIS
-from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE, elternteil_zu_kinder
+from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE
 from pdf_export import erstelle_pdf
 
 st.set_page_config(page_title="Kindergarten Kochplan", page_icon="🍲", layout="wide")
@@ -20,7 +19,6 @@ if "plan" not in st.session_state:
 if "historie" not in st.session_state:
     st.session_state.historie = lade_historie()
 
-
 config = st.session_state.config
 
 
@@ -28,17 +26,17 @@ config = st.session_state.config
 with st.sidebar:
     st.header("Konfiguration")
 
-    # --- Einstellungen ---
+    # --- Planungszeitraum ---
     with st.expander("Planungszeitraum", expanded=False):
         planungsmonate = st.number_input(
             "Monate", min_value=1, max_value=12,
             value=config["einstellungen"].get("planungsmonate", 3),
-            key="planungsmonate"
+            key="planungsmonate",
         )
         startdatum = st.date_input(
             "Startdatum",
             value=str_zu_datum(config["einstellungen"].get("startdatum", date.today().isoformat())),
-            key="startdatum"
+            key="startdatum",
         )
         config["einstellungen"]["planungsmonate"] = planungsmonate
         config["einstellungen"]["startdatum"] = startdatum.isoformat()
@@ -47,12 +45,10 @@ with st.sidebar:
     with st.expander("Feiertage (werden übersprungen)", expanded=False):
         feiertage_str = config["einstellungen"].get("feiertage", [])
         neuer_feiertag = st.date_input("Datum hinzufügen", key="neuer_feiertag")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Hinzufügen", key="btn_feiertag_add"):
-                if neuer_feiertag.isoformat() not in feiertage_str:
-                    feiertage_str.append(neuer_feiertag.isoformat())
-                    config["einstellungen"]["feiertage"] = feiertage_str
+        if st.button("Hinzufügen", key="btn_feiertag_add"):
+            if neuer_feiertag.isoformat() not in feiertage_str:
+                feiertage_str.append(neuer_feiertag.isoformat())
+                config["einstellungen"]["feiertage"] = feiertage_str
         if feiertage_str:
             st.write("Eingetragene Tage:")
             for ft in sorted(feiertage_str):
@@ -72,11 +68,11 @@ with st.sidebar:
                 config["einstellungen"]["schliesztage"] = schliesztage_str
         if schliesztage_str:
             st.write("Eingetragene Schließtage:")
-            for st_tag in sorted(schliesztage_str):
+            for sz in sorted(schliesztage_str):
                 c1, c2 = st.columns([3, 1])
-                c1.write(st_tag)
-                if c2.button("✕", key=f"del_sz_{st_tag}"):
-                    schliesztage_str.remove(st_tag)
+                c1.write(sz)
+                if c2.button("✕", key=f"del_sz_{sz}"):
+                    schliesztage_str.remove(sz)
                     config["einstellungen"]["schliesztage"] = schliesztage_str
 
     # --- Gerichte ---
@@ -88,58 +84,55 @@ with st.sidebar:
             )
         config["gerichte"] = gerichte
 
-    # --- Eltern ---
-    with st.expander("Eltern verwalten", expanded=False):
-        eltern = config.get("eltern", [])
+    # --- Kinder ---
+    with st.expander("Kinder verwalten", expanded=False):
+        kinder = config.get("kinder", [])
 
-        with st.form("neues_elternteil", clear_on_submit=True):
-            st.subheader("Elternteil hinzufügen")
-            neuer_name = st.text_input("Name")
+        with st.form("neues_kind", clear_on_submit=True):
+            st.subheader("Kind hinzufügen")
+            neues_kind_name = st.text_input("Name")
             neues_telefon = st.text_input("Telefon")
-            neuer_vorstand = st.checkbox("Vorstandsmitglied")
+            neuer_vorstand = st.checkbox("Vorstandsmitglied (wird halb so oft eingeplant)")
             neuer_wochentage = st.multiselect(
                 "Erlaubte Wochentage (leer = alle)",
                 options=list(range(5)),
                 format_func=lambda x: WOCHENTAGE[x],
             )
             if st.form_submit_button("Hinzufügen"):
-                if neuer_name and not any(e["name"] == neuer_name for e in eltern):
-                    eltern.append({
-                        "name": neuer_name,
+                if neues_kind_name and not any(k["name"] == neues_kind_name for k in kinder):
+                    kinder.append({
+                        "name": neues_kind_name,
                         "telefon": neues_telefon,
                         "ist_vorstand": neuer_vorstand,
                         "erlaubte_wochentage": neuer_wochentage,
                         "sperrzeiten": [],
                     })
-                    config["eltern"] = eltern
-                    st.success(f"{neuer_name} hinzugefügt.")
+                    config["kinder"] = kinder
+                    st.success(f"{neues_kind_name} hinzugefügt.")
 
-        if eltern:
+        if kinder:
             st.divider()
-            for idx, elternteil in enumerate(eltern):
-                with st.expander(elternteil["name"], expanded=False):
-                    elternteil["telefon"] = st.text_input(
-                        "Telefon", value=elternteil.get("telefon", ""), key=f"tel_{idx}"
+            for idx, kind in enumerate(kinder):
+                with st.expander(kind["name"], expanded=False):
+                    kind["telefon"] = st.text_input(
+                        "Telefon", value=kind.get("telefon", ""), key=f"tel_{idx}"
                     )
-                    elternteil["ist_vorstand"] = st.checkbox(
-                        "Vorstandsmitglied", value=elternteil.get("ist_vorstand", False), key=f"vorstand_{idx}"
+                    kind["ist_vorstand"] = st.checkbox(
+                        "Vorstandsmitglied", value=kind.get("ist_vorstand", False), key=f"vorstand_{idx}"
                     )
-                    elternteil["erlaubte_wochentage"] = st.multiselect(
+                    kind["erlaubte_wochentage"] = st.multiselect(
                         "Erlaubte Wochentage (leer = alle)",
                         options=list(range(5)),
-                        default=elternteil.get("erlaubte_wochentage", []),
+                        default=kind.get("erlaubte_wochentage", []),
                         format_func=lambda x: WOCHENTAGE[x],
                         key=f"wochentage_{idx}",
                     )
-                    # Sperrzeiten
-                    sperrzeiten = elternteil.get("sperrzeiten", [])
+                    sperrzeiten = kind.get("sperrzeiten", [])
                     neue_sperre = st.date_input("Sperrzeit hinzufügen", key=f"sperre_{idx}")
-                    sperre_col1, sperre_col2 = st.columns(2)
-                    with sperre_col1:
-                        if st.button("Sperrzeit eintragen", key=f"btn_sperre_{idx}"):
-                            if neue_sperre.isoformat() not in sperrzeiten:
-                                sperrzeiten.append(neue_sperre.isoformat())
-                                elternteil["sperrzeiten"] = sperrzeiten
+                    if st.button("Sperrzeit eintragen", key=f"btn_sperre_{idx}"):
+                        if neue_sperre.isoformat() not in sperrzeiten:
+                            sperrzeiten.append(neue_sperre.isoformat())
+                            kind["sperrzeiten"] = sperrzeiten
                     if sperrzeiten:
                         st.write("Sperrzeiten:")
                         for sp in sorted(sperrzeiten):
@@ -147,35 +140,11 @@ with st.sidebar:
                             sc1.write(sp)
                             if sc2.button("✕", key=f"del_sp_{idx}_{sp}"):
                                 sperrzeiten.remove(sp)
-                                elternteil["sperrzeiten"] = sperrzeiten
-
-                    if st.button("Elternteil entfernen", key=f"del_elternteil_{idx}"):
-                        eltern.pop(idx)
-                        config["eltern"] = eltern
+                                kind["sperrzeiten"] = sperrzeiten
+                    if st.button("Kind entfernen", key=f"del_kind_{idx}"):
+                        kinder.pop(idx)
+                        config["kinder"] = kinder
                         st.rerun()
-
-        config["eltern"] = eltern
-
-    # --- Kinder ---
-    with st.expander("Kinder verwalten", expanded=False):
-        kinder = config.get("kinder", [])
-        eltern_namen = [e["name"] for e in config.get("eltern", [])]
-
-        with st.form("neues_kind", clear_on_submit=True):
-            neues_kind_name = st.text_input("Name des Kindes")
-            kind_eltern = st.multiselect("Zugehörige Eltern", options=eltern_namen)
-            if st.form_submit_button("Kind hinzufügen"):
-                if neues_kind_name:
-                    kinder.append({"name": neues_kind_name, "eltern": kind_eltern})
-                    config["kinder"] = kinder
-
-        for idx, kind in enumerate(kinder):
-            col1, col2 = st.columns([3, 1])
-            col1.write(f"**{kind['name']}** – {', '.join(kind.get('eltern', []))}")
-            if col2.button("✕", key=f"del_kind_{idx}"):
-                kinder.pop(idx)
-                config["kinder"] = kinder
-                st.rerun()
 
         config["kinder"] = kinder
 
@@ -213,13 +182,11 @@ with tab_plan:
 
     with col_gen:
         if st.button("Plan generieren", type="primary"):
-            startdatum = str_zu_datum(config["einstellungen"]["startdatum"])
+            start = str_zu_datum(config["einstellungen"]["startdatum"])
             monate = config["einstellungen"]["planungsmonate"]
-            enddatum = startdatum + relativedelta(months=monate) - timedelta(days=1)
-            st.session_state.plan = generiere_plan(
-                config, st.session_state.historie, startdatum, enddatum
-            )
-            st.success(f"Plan für {monate} Monate ab {startdatum.strftime('%d.%m.%Y')} generiert.")
+            ende = start + relativedelta(months=monate) - timedelta(days=1)
+            st.session_state.plan = generiere_plan(config, st.session_state.historie, start, ende)
+            st.success(f"Plan für {monate} Monate ab {start.strftime('%d.%m.%Y')} generiert.")
 
     plan = st.session_state.plan
 
@@ -241,75 +208,67 @@ with tab_plan:
             )
 
         if st.button("Plan als Historie speichern"):
-            neue_einsaetze = berechne_einsaetze(plan)
-            for name, anzahl in neue_einsaetze.items():
+            for name, anzahl in berechne_einsaetze(plan).items():
                 st.session_state.historie[name] = st.session_state.historie.get(name, 0) + anzahl
             speichere_historie(st.session_state.historie)
             st.success("Einsätze zur Historie hinzugefügt.")
 
         # Plan anzeigen: wochenweise HTML-Tabelle
-        eltern_namen = [""] + [e["name"] for e in config["eltern"]]
-        kind_mapping = elternteil_zu_kinder(config)
         feiertage_set = {d for d in config["einstellungen"].get("feiertage", [])}
         gerichte = config.get("gerichte", {})
-
         plan_index = {e["datum"]: e for e in plan}
-        if plan:
-            erster = date.fromisoformat(plan[0]["datum"])
-            letzter = date.fromisoformat(plan[-1]["datum"])
-            montag_start = erster - timedelta(days=erster.weekday())
-            freitag_ende = letzter + timedelta(days=(4 - letzter.weekday()))
 
-            wochen: list[list[date]] = []
-            d = montag_start
-            while d <= freitag_ende:
-                wochen.append([d + timedelta(days=i) for i in range(5)])
-                d += timedelta(days=7)
+        erster = date.fromisoformat(plan[0]["datum"])
+        letzter = date.fromisoformat(plan[-1]["datum"])
+        montag_start = erster - timedelta(days=erster.weekday())
+        freitag_ende = letzter + timedelta(days=(4 - letzter.weekday()))
 
-            WOCHENTAGE_LANG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
+        wochen: list[list[date]] = []
+        d = montag_start
+        while d <= freitag_ende:
+            wochen.append([d + timedelta(days=i) for i in range(5)])
+            d += timedelta(days=7)
 
-            kopf_zellen = ""
-            for i, tag in enumerate(WOCHENTAGE_LANG):
-                gericht = gerichte.get(str(i), "")
-                kopf_zellen += f'<th>{tag}<br><span class="gericht">{gericht}</span></th>'
+        WOCHENTAGE_LANG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
+        kopf_zellen = ""
+        for i, tag in enumerate(WOCHENTAGE_LANG):
+            gericht = gerichte.get(str(i), "")
+            kopf_zellen += f'<th>{tag}<br><span class="gericht">{gericht}</span></th>'
 
-            zeilen_html = ""
-            for w_idx, woche in enumerate(wochen):
-                kw = woche[0].isocalendar()[1]
-                zellen = ""
-                for tag in woche:
-                    datum_str = tag.isoformat()
-                    eintrag = plan_index.get(datum_str)
+        zeilen_html = ""
+        for w_idx, woche in enumerate(wochen):
+            kw = woche[0].isocalendar()[1]
+            zellen = ""
+            for tag in woche:
+                datum_str = tag.isoformat()
+                eintrag = plan_index.get(datum_str)
+                if datum_str in feiertage_set:
+                    zellen += (
+                        f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
+                        f'<span class="sonder">Feiertag</span></td>'
+                    )
+                elif eintrag is None:
+                    zellen += '<td class="leer"></td>'
+                elif eintrag.get("ist_schliesztag"):
+                    zellen += (
+                        f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
+                        f'<span class="sonder">Schließtag</span></td>'
+                    )
+                else:
+                    kind_name = eintrag.get("kind", "")
+                    anzeige = kind_name if kind_name else "–"
+                    manuell = ' <span class="manuell">✏</span>' if eintrag.get("manuell_geaendert") else ""
+                    zellen += (
+                        f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
+                        f'<span class="name">{anzeige}{manuell}</span></td>'
+                    )
+            zeilenfarbe = "#F0F4F0" if w_idx % 2 == 0 else "#FFFFFF"
+            zeilen_html += (
+                f'<tr style="background-color:{zeilenfarbe};">'
+                f'<td class="kw-zelle">KW {kw}</td>{zellen}</tr>'
+            )
 
-                    if datum_str in feiertage_set:
-                        zellen += (
-                            f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
-                            f'<span class="sonder">Feiertag</span></td>'
-                        )
-                    elif eintrag is None:
-                        zellen += '<td class="leer"></td>'
-                    elif eintrag.get("ist_schliesztag"):
-                        zellen += (
-                            f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
-                            f'<span class="sonder">Schließtag</span></td>'
-                        )
-                    else:
-                        elternteil = eintrag.get("elternteil", "")
-                        kinder = kind_mapping.get(elternteil, [])
-                        anzeige = ", ".join(kinder) if kinder else elternteil if elternteil else "–"
-                        manuell = ' <span class="manuell">✏</span>' if eintrag.get("manuell_geaendert") else ""
-                        zellen += (
-                            f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
-                            f'<span class="name">{anzeige}{manuell}</span></td>'
-                        )
-
-                zeilenfarbe = "#F0F4F0" if w_idx % 2 == 0 else "#FFFFFF"
-                zeilen_html += (
-                    f'<tr style="background-color:{zeilenfarbe};">'
-                    f'<td class="kw-zelle">KW {kw}</td>{zellen}</tr>'
-                )
-
-            html = f"""
+        html = f"""
 <style>
   .kochplan {{ width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px; }}
   .kochplan th {{
@@ -329,18 +288,15 @@ with tab_plan:
   .kochplan .manuell {{ color: #E07020; font-style: normal; font-size: 0.85em; }}
 </style>
 <table class="kochplan">
-  <thead>
-    <tr><th>Woche</th>{kopf_zellen}</tr>
-  </thead>
-  <tbody>
-    {zeilen_html}
-  </tbody>
+  <thead><tr><th>Woche</th>{kopf_zellen}</tr></thead>
+  <tbody>{zeilen_html}</tbody>
 </table>
 """
-            st.markdown(html, unsafe_allow_html=True)
+        st.markdown(html, unsafe_allow_html=True)
 
         # Manuelle Bearbeitung
         st.divider()
+        kinder_namen = [""] + [k["name"] for k in config["kinder"]]
         with st.expander("Plan manuell bearbeiten", expanded=False):
             for idx, eintrag in enumerate(plan):
                 if eintrag.get("ist_schliesztag"):
@@ -350,17 +306,16 @@ with tab_plan:
                 cols[0].write(d.strftime("%d.%m.%Y"))
                 cols[1].write(eintrag["wochentag_name"])
                 cols[2].write(eintrag["gericht"])
-                aktueller_elternteil = eintrag.get("elternteil", "")
-                neuer_elternteil = cols[3].selectbox(
-                    "Elternteil",
-                    options=eltern_namen,
-                    index=eltern_namen.index(aktueller_elternteil) if aktueller_elternteil in eltern_namen else 0,
-                    format_func=lambda name: ", ".join(kind_mapping.get(name, [])) if name and kind_mapping.get(name) else name,
+                aktuelles_kind = eintrag.get("kind", "")
+                neues_kind = cols[3].selectbox(
+                    "Kind",
+                    options=kinder_namen,
+                    index=kinder_namen.index(aktuelles_kind) if aktuelles_kind in kinder_namen else 0,
                     key=f"select_{idx}",
                     label_visibility="collapsed",
                 )
-                if neuer_elternteil != aktueller_elternteil:
-                    plan[idx]["elternteil"] = neuer_elternteil
+                if neues_kind != aktuelles_kind:
+                    plan[idx]["kind"] = neues_kind
                     plan[idx]["manuell_geaendert"] = True
                 if eintrag.get("manuell_geaendert"):
                     cols[4].markdown("✏️")
@@ -374,7 +329,6 @@ with tab_historie:
     else:
         for name, anzahl in sorted(historie.items(), key=lambda x: -x[1]):
             st.write(f"**{name}**: {anzahl} Einsatz/Einsätze")
-
     st.divider()
     if st.button("Historie zurücksetzen", type="secondary"):
         st.session_state.historie = {}
@@ -390,13 +344,12 @@ with tab_statistik:
     else:
         einsaetze = berechne_einsaetze(plan)
         historische = st.session_state.historie
-
         st.subheader("Einsätze im aktuellen Plan")
-        for elternteil in config["eltern"]:
-            name = elternteil["name"]
+        for kind in config["kinder"]:
+            name = kind["name"]
             aktuell = einsaetze.get(name, 0)
             gesamt = historische.get(name, 0) + aktuell
-            vorstand = " (Vorstand)" if elternteil.get("ist_vorstand") else ""
+            vorstand = " (Vorstand)" if kind.get("ist_vorstand") else ""
             st.metric(
                 label=f"{name}{vorstand}",
                 value=f"{aktuell} aktuell",

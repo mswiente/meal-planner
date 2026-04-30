@@ -17,7 +17,6 @@ from reportlab.platypus import (
     Image,
 )
 
-from planer import elternteil_zu_kinder
 
 WOCHENTAGE_KURZ = ["Mo", "Di", "Mi", "Do", "Fr"]
 WOCHENTAGE_LANG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
@@ -80,9 +79,6 @@ def erstelle_pdf(
         date.fromisoformat(d): True
         for d in config["einstellungen"].get("feiertage", [])
     }
-
-    # Elternteil → Kinder-Mapping
-    kind_mapping = elternteil_zu_kinder(config)
 
     # Plan nach Datum indizieren
     plan_index: dict[str, dict[str, Any]] = {e["datum"]: e for e in plan}
@@ -179,12 +175,10 @@ def erstelle_pdf(
                 ]
                 zeile.append(inhalt_zelle)
             else:
-                elternteil_name = eintrag.get("elternteil", "")
-                kinder = kind_mapping.get(elternteil_name, [])
-                anzeige = ", ".join(kinder) if kinder else elternteil_name if elternteil_name else "–"
+                kind_name = eintrag.get("kind", "")
                 inhalt_zelle = [
                     Paragraph(tag.strftime("%d.%m.%Y"), zellen_datum_stil),
-                    Paragraph(anzeige, zellen_name_stil),
+                    Paragraph(kind_name if kind_name else "–", zellen_name_stil),
                 ]
                 zeile.append(inhalt_zelle)
 

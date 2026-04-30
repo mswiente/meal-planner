@@ -227,45 +227,110 @@ with tab_plan:
             speichere_historie(st.session_state.historie)
             st.success("Einsätze zur Historie hinzugefügt.")
 
-        # Plan anzeigen und manuell bearbeiten
+        # Plan anzeigen: wochenweise HTML-Tabelle
         eltern_namen = [""] + [e["name"] for e in config["eltern"]]
         kind_mapping = elternteil_zu_kinder(config)
+        feiertage_set = {d for d in config["einstellungen"].get("feiertage", [])}
+        gerichte = config.get("gerichte", {})
 
-        # Nach Monaten gruppieren
-        monate_gruppen: dict[str, list[int]] = {}
-        for idx, eintrag in enumerate(plan):
-            d_str = eintrag["datum"]
-            monat_key = d_str[:7]
-            monate_gruppen.setdefault(monat_key, []).append(idx)
+        plan_index = {e["datum"]: e for e in plan}
+        if plan:
+            erster = date.fromisoformat(plan[0]["datum"])
+            letzter = date.fromisoformat(plan[-1]["datum"])
+            montag_start = erster - timedelta(days=erster.weekday())
+            freitag_ende = letzter + timedelta(days=(4 - letzter.weekday()))
 
-        MONATE_DE = [
-            "", "Januar", "Februar", "März", "April", "Mai", "Juni",
-            "Juli", "August", "September", "Oktober", "November", "Dezember",
-        ]
+            wochen: list[list[date]] = []
+            d = montag_start
+            while d <= freitag_ende:
+                wochen.append([d + timedelta(days=i) for i in range(5)])
+                d += timedelta(days=7)
 
-        for monat_key, indizes in sorted(monate_gruppen.items()):
-            jahr, monat = monat_key.split("-")
-            st.subheader(f"{MONATE_DE[int(monat)]} {jahr}")
+            WOCHENTAGE_LANG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
 
-            for idx in indizes:
-                eintrag = plan[idx]
+            kopf_zellen = ""
+            for i, tag in enumerate(WOCHENTAGE_LANG):
+                gericht = gerichte.get(str(i), "")
+                kopf_zellen += f'<th>{tag}<br><span class="gericht">{gericht}</span></th>'
+
+            zeilen_html = ""
+            for w_idx, woche in enumerate(wochen):
+                kw = woche[0].isocalendar()[1]
+                zellen = ""
+                for tag in woche:
+                    datum_str = tag.isoformat()
+                    eintrag = plan_index.get(datum_str)
+
+                    if datum_str in feiertage_set:
+                        zellen += (
+                            f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
+                            f'<span class="sonder">Feiertag</span></td>'
+                        )
+                    elif eintrag is None:
+                        zellen += '<td class="leer"></td>'
+                    elif eintrag.get("ist_schliesztag"):
+                        zellen += (
+                            f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
+                            f'<span class="sonder">Schließtag</span></td>'
+                        )
+                    else:
+                        elternteil = eintrag.get("elternteil", "")
+                        kinder = kind_mapping.get(elternteil, [])
+                        anzeige = ", ".join(kinder) if kinder else elternteil if elternteil else "–"
+                        manuell = ' <span class="manuell">✏</span>' if eintrag.get("manuell_geaendert") else ""
+                        zellen += (
+                            f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
+                            f'<span class="name">{anzeige}{manuell}</span></td>'
+                        )
+
+                zeilenfarbe = "#F0F4F0" if w_idx % 2 == 0 else "#FFFFFF"
+                zeilen_html += (
+                    f'<tr style="background-color:{zeilenfarbe};">'
+                    f'<td class="kw-zelle">KW {kw}</td>{zellen}</tr>'
+                )
+
+            html = f"""
+<style>
+  .kochplan {{ width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px; }}
+  .kochplan th {{
+    background-color: #4A7C59; color: white; padding: 8px 10px;
+    text-align: center; border: 1px solid #3a6347;
+  }}
+  .kochplan th .gericht {{ font-size: 0.78em; font-weight: normal; color: #CCEEDD; display: block; margin-top: 2px; }}
+  .kochplan td {{ padding: 6px 10px; vertical-align: top; border: 1px solid #CCCCCC; min-width: 110px; }}
+  .kochplan td.kw-zelle {{
+    background-color: #E8F0EA !important; font-weight: bold;
+    text-align: center; vertical-align: middle; white-space: nowrap;
+  }}
+  .kochplan td.leer {{ background-color: #F8F8F8; }}
+  .kochplan .datum {{ font-size: 0.75em; color: #999999; display: block; margin-bottom: 2px; }}
+  .kochplan .name {{ font-weight: bold; display: block; }}
+  .kochplan .sonder {{ font-style: italic; color: #AAAAAA; display: block; }}
+  .kochplan .manuell {{ color: #E07020; font-style: normal; font-size: 0.85em; }}
+</style>
+<table class="kochplan">
+  <thead>
+    <tr><th>Woche</th>{kopf_zellen}</tr>
+  </thead>
+  <tbody>
+    {zeilen_html}
+  </tbody>
+</table>
+"""
+            st.markdown(html, unsafe_allow_html=True)
+
+        # Manuelle Bearbeitung
+        st.divider()
+        with st.expander("Plan manuell bearbeiten", expanded=False):
+            for idx, eintrag in enumerate(plan):
+                if eintrag.get("ist_schliesztag"):
+                    continue
                 d = date.fromisoformat(eintrag["datum"])
                 cols = st.columns([2, 2, 3, 3, 1])
                 cols[0].write(d.strftime("%d.%m.%Y"))
                 cols[1].write(eintrag["wochentag_name"])
-
-                if eintrag.get("ist_schliesztag"):
-                    cols[2].write("–")
-                    cols[3].markdown("*Schließtag*")
-                    cols[4].write("")
-                    continue
-
                 cols[2].write(eintrag["gericht"])
-
                 aktueller_elternteil = eintrag.get("elternteil", "")
-                kinder = kind_mapping.get(aktueller_elternteil, [])
-                kind_anzeige = ", ".join(kinder) if kinder else aktueller_elternteil
-
                 neuer_elternteil = cols[3].selectbox(
                     "Elternteil",
                     options=eltern_namen,
@@ -277,7 +342,6 @@ with tab_plan:
                 if neuer_elternteil != aktueller_elternteil:
                     plan[idx]["elternteil"] = neuer_elternteil
                     plan[idx]["manuell_geaendert"] = True
-
                 if eintrag.get("manuell_geaendert"):
                     cols[4].markdown("✏️")
 

@@ -1,7 +1,7 @@
+import os
 from datetime import date, timedelta
 from io import BytesIO
 from typing import Any
-import math
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -14,8 +14,8 @@ from reportlab.platypus import (
     Paragraph,
     Spacer,
     HRFlowable,
+    Image,
 )
-from reportlab.pdfbase import pdfmetrics
 
 from planer import elternteil_zu_kinder
 
@@ -122,8 +122,31 @@ def erstelle_pdf(
 
     inhalt = []
 
-    inhalt.append(Paragraph("Kochdienste Kindergarten", titel_stil))
-    inhalt.append(Paragraph(zeitraum, untertitel_stil))
+    # Kopfbereich: Logo links, Titel rechts
+    logo_pfad = config["einstellungen"].get("logo_pfad", "")
+    titel_absatz = [
+        Paragraph("Kochdienste Kindergarten", titel_stil),
+        Paragraph(zeitraum, untertitel_stil),
+    ]
+    if logo_pfad and os.path.exists(logo_pfad):
+        logo_hoehe = 2.0 * cm
+        logo_img = Image(logo_pfad, height=logo_hoehe, width=logo_hoehe * 1.5)
+        kopf_tabelle = Table(
+            [[logo_img, titel_absatz]],
+            colWidths=[2.5 * cm, None],
+        )
+        kopf_tabelle.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        inhalt.append(kopf_tabelle)
+    else:
+        inhalt.append(Paragraph("Kochdienste Kindergarten", titel_stil))
+        inhalt.append(Paragraph(zeitraum, untertitel_stil))
+
     inhalt.append(Spacer(1, 0.3 * cm))
 
     # Tabelle aufbauen

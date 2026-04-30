@@ -1,9 +1,10 @@
+import os
 import streamlit as st
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 import calendar
 
-from daten import lade_config, speichere_config, lade_historie, speichere_historie, str_zu_datum
+from daten import lade_config, speichere_config, lade_historie, speichere_historie, str_zu_datum, DATEN_VERZEICHNIS
 from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE, elternteil_zu_kinder
 from pdf_export import erstelle_pdf
 
@@ -178,6 +179,25 @@ with st.sidebar:
 
         config["kinder"] = kinder
 
+    # --- Logo ---
+    with st.expander("Logo (PDF)", expanded=False):
+        logo_pfad = config["einstellungen"].get("logo_pfad", "")
+        if logo_pfad and os.path.exists(logo_pfad):
+            st.image(logo_pfad, width=120)
+        hochgeladen = st.file_uploader("Logo hochladen (PNG/JPG)", type=["png", "jpg", "jpeg"], key="logo_upload")
+        if hochgeladen:
+            logo_ziel = os.path.join(DATEN_VERZEICHNIS, "logo" + os.path.splitext(hochgeladen.name)[1])
+            with open(logo_ziel, "wb") as f:
+                f.write(hochgeladen.read())
+            config["einstellungen"]["logo_pfad"] = logo_ziel
+            st.success("Logo gespeichert.")
+            st.rerun()
+        if logo_pfad and os.path.exists(logo_pfad):
+            if st.button("Logo entfernen", key="btn_logo_entfernen"):
+                os.remove(logo_pfad)
+                config["einstellungen"]["logo_pfad"] = ""
+                st.rerun()
+
     st.divider()
     if st.button("Konfiguration speichern", type="primary"):
         speichere_config(config)
@@ -299,7 +319,7 @@ with tab_plan:
   .kochplan th .gericht {{ font-size: 0.78em; font-weight: normal; color: #CCEEDD; display: block; margin-top: 2px; }}
   .kochplan td {{ padding: 6px 10px; vertical-align: top; border: 1px solid #CCCCCC; min-width: 110px; }}
   .kochplan td.kw-zelle {{
-    background-color: #E8F0EA !important; font-weight: bold;
+    background-color: #E8F0EA !important; font-weight: bold; color: #000000;
     text-align: center; vertical-align: middle; white-space: nowrap;
   }}
   .kochplan td.leer {{ background-color: #F8F8F8; }}

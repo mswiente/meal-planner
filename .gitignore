@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+daten/config.json
+daten/historie.json

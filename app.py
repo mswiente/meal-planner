@@ -382,10 +382,35 @@ with tab_plan:
             if ansicht == "Tabelle":
                 st.table(statistik_zeilen)
             else:
-                chart_daten = {z["Kind"]: {"Aktueller Plan": z["Aktueller Plan"], "Gesamt": z["Gesamt (inkl. Historie)"]} for z in statistik_zeilen}
                 import pandas as pd
-                df = pd.DataFrame(chart_daten).T
-                st.bar_chart(df)
+                import altair as alt
+
+                spalten_optionen = ["Aktueller Plan", "Gesamt (inkl. Historie)"]
+                ausgewaehlte_spalten = st.multiselect(
+                    "Angezeigte Spalten",
+                    options=spalten_optionen,
+                    default=spalten_optionen,
+                    key="chart_spalten",
+                )
+                if ausgewaehlte_spalten:
+                    df = pd.DataFrame([
+                        {"Kind": z["Kind"], "Kategorie": sp, "Einsätze": z[sp]}
+                        for z in statistik_zeilen
+                        for sp in ausgewaehlte_spalten
+                    ])
+                    chart = (
+                        alt.Chart(df)
+                        .mark_bar()
+                        .encode(
+                            x=alt.X("Kind:N", title="Kind", axis=alt.Axis(labelAngle=0)),
+                            xOffset=alt.XOffset("Kategorie:N"),
+                            y=alt.Y("Einsätze:Q", title="Einsätze"),
+                            color=alt.Color("Kategorie:N", title=""),
+                            tooltip=["Kind", "Kategorie", "Einsätze"],
+                        )
+                        .properties(height=300)
+                    )
+                    st.altair_chart(chart, use_container_width=True)
 
         # Manuelle Bearbeitung
         st.divider()

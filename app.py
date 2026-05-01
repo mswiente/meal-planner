@@ -1,7 +1,6 @@
 import os
 import streamlit as st
 from datetime import date, timedelta
-from dateutil.relativedelta import relativedelta
 import holidays as holidays_lib
 
 from daten import lade_config, speichere_config, lade_historie, speichere_historie, str_zu_datum, DATEN_VERZEICHNIS
@@ -38,18 +37,18 @@ with st.sidebar:
 
     # --- Planungszeitraum ---
     with st.expander("Planungszeitraum", expanded=False):
-        planungsmonate = st.number_input(
-            "Monate", min_value=1, max_value=12,
-            value=config["einstellungen"].get("planungsmonate", 3),
-            key="planungsmonate",
-        )
         startdatum = st.date_input(
-            "Startdatum",
+            "Von",
             value=str_zu_datum(config["einstellungen"].get("startdatum", date.today().isoformat())),
             key="startdatum",
         )
-        config["einstellungen"]["planungsmonate"] = planungsmonate
+        enddatum = st.date_input(
+            "Bis",
+            value=str_zu_datum(config["einstellungen"].get("enddatum", date(date.today().year, 12, 31).isoformat())),
+            key="enddatum",
+        )
         config["einstellungen"]["startdatum"] = startdatum.isoformat()
+        config["einstellungen"]["enddatum"] = enddatum.isoformat()
 
     # --- Schließzeiten ---
     with st.expander("Schließzeiten", expanded=False):
@@ -73,7 +72,7 @@ with st.sidebar:
             value=date.today().year, step=1, key="feiertag_jahr",
         )
         if st.button("Feiertage generieren", key="btn_feiertage_gen"):
-            feiertage_dict = holidays_lib.Germany(subdiv=bl, years=int(feiertag_jahr))
+            feiertage_dict = holidays_lib.Germany(subdiv=bl, years=int(feiertag_jahr), language="de")
             bestehende_namen = {(sz["von"], sz["name"]) for sz in schliesszeiten}
             neu = 0
             for ft_datum, ft_name in sorted(feiertage_dict.items()):
@@ -136,7 +135,6 @@ with st.sidebar:
         with st.form("neues_kind", clear_on_submit=True):
             st.subheader("Kind hinzufügen")
             neues_kind_name = st.text_input("Name")
-            neues_telefon = st.text_input("Telefon")
             neuer_vorstand = st.checkbox("Vorstandsmitglied (wird halb so oft eingeplant)")
             neuer_wochentage = st.multiselect(
                 "Erlaubte Wochentage (leer = alle)",
@@ -147,7 +145,6 @@ with st.sidebar:
                 if neues_kind_name and not any(k["name"] == neues_kind_name for k in kinder):
                     kinder.append({
                         "name": neues_kind_name,
-                        "telefon": neues_telefon,
                         "ist_vorstand": neuer_vorstand,
                         "erlaubte_wochentage": neuer_wochentage,
                         "sperrzeiten": [],
@@ -159,9 +156,6 @@ with st.sidebar:
             st.divider()
             for idx, kind in enumerate(kinder):
                 with st.expander(kind["name"], expanded=False):
-                    kind["telefon"] = st.text_input(
-                        "Telefon", value=kind.get("telefon", ""), key=f"tel_{idx}"
-                    )
                     kind["ist_vorstand"] = st.checkbox(
                         "Vorstandsmitglied", value=kind.get("ist_vorstand", False), key=f"vorstand_{idx}"
                     )
@@ -228,10 +222,9 @@ with tab_plan:
     with col_gen:
         if st.button("Plan generieren", type="primary"):
             start = str_zu_datum(config["einstellungen"]["startdatum"])
-            monate = config["einstellungen"]["planungsmonate"]
-            ende = start + relativedelta(months=monate) - timedelta(days=1)
+            ende = str_zu_datum(config["einstellungen"]["enddatum"])
             st.session_state.plan = generiere_plan(config, st.session_state.historie, start, ende)
-            st.success(f"Plan für {monate} Monate ab {start.strftime('%d.%m.%Y')} generiert.")
+            st.success(f"Plan {start.strftime('%d.%m.%Y')} – {ende.strftime('%d.%m.%Y')} generiert.")
 
     plan = st.session_state.plan
 

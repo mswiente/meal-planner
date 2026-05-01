@@ -9,8 +9,8 @@ HISTORIE_DATEI = os.path.join(DATEN_VERZEICHNIS, "historie.json")
 
 STANDARD_CONFIG: dict[str, Any] = {
     "einstellungen": {
-        "planungsmonate": 3,
         "startdatum": date.today().isoformat(),
+        "enddatum": date(date.today().year, 12, 31).isoformat(),
         "bundesland": "HE",
         "schliesszeiten": [],
     },

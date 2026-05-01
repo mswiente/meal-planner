@@ -7,6 +7,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     SimpleDocTemplate,
     Table,
@@ -122,15 +123,18 @@ def erstelle_pdf(
     ]
     if logo_pfad and os.path.exists(logo_pfad):
         logo_hoehe = 2.0 * cm
-        logo_img = Image(logo_pfad, height=logo_hoehe, width=logo_hoehe * 1.5)
+        iw, ih = ImageReader(logo_pfad).getSize()
+        logo_breite = logo_hoehe * (iw / ih)
+        logo_img = Image(logo_pfad, height=logo_hoehe, width=logo_breite)
+        # 3-Spalten-Layout: Logo | Titel (zentriert) | Leerraum gleicher Breite
         kopf_tabelle = Table(
-            [[logo_img, titel_absatz]],
-            colWidths=[2.5 * cm, None],
+            [[logo_img, titel_absatz, ""]],
+            colWidths=[logo_breite + 0.3 * cm, None, logo_breite + 0.3 * cm],
         )
         kopf_tabelle.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
             ("TOPPADDING", (0, 0), (-1, -1), 0),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
         ]))

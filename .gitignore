@@ -1,0 +1,6 @@
+.env
+wordpress/uploads/*
+!wordpress/uploads/.gitkeep
+wordpress/plugins/*
+!wordpress/plugins/.gitkeep
+!wordpress/plugins.md

@@ -5,7 +5,7 @@ from typing import Any
 
 DATEN_VERZEICHNIS = os.path.join(os.path.dirname(__file__), "daten")
 CONFIG_DATEI = os.path.join(DATEN_VERZEICHNIS, "config.json")
-HISTORIE_DATEI = os.path.join(DATEN_VERZEICHNIS, "historie.json")
+PLAENE_DATEI = os.path.join(DATEN_VERZEICHNIS, "plaene.json")
 
 STANDARD_CONFIG: dict[str, Any] = {
     "einstellungen": {
@@ -43,18 +43,27 @@ def speichere_config(config: dict[str, Any]) -> None:
         json.dump(config, f, ensure_ascii=False, indent=2)
 
 
-def lade_historie() -> dict[str, int]:
+def lade_plaene() -> list[dict[str, Any]]:
     _sicherstellen_verzeichnis()
-    if not os.path.exists(HISTORIE_DATEI):
-        return {}
-    with open(HISTORIE_DATEI, encoding="utf-8") as f:
+    if not os.path.exists(PLAENE_DATEI):
+        return []
+    with open(PLAENE_DATEI, encoding="utf-8") as f:
         return json.load(f)
 
 
-def speichere_historie(historie: dict[str, int]) -> None:
+def speichere_plaene(plaene: list[dict[str, Any]]) -> None:
     _sicherstellen_verzeichnis()
-    with open(HISTORIE_DATEI, "w", encoding="utf-8") as f:
-        json.dump(historie, f, ensure_ascii=False, indent=2)
+    with open(PLAENE_DATEI, "w", encoding="utf-8") as f:
+        json.dump(plaene, f, ensure_ascii=False, indent=2)
+
+
+def gesamteinsaetze(plaene: list[dict[str, Any]]) -> dict[str, int]:
+    from planer import berechne_einsaetze
+    gesamt: dict[str, int] = {}
+    for plan in plaene:
+        for name, anzahl in berechne_einsaetze(plan["eintraege"]).items():
+            gesamt[name] = gesamt.get(name, 0) + anzahl
+    return gesamt
 
 
 def schliesszeit_daten(config: dict[str, Any]) -> dict[str, str]:

@@ -3,7 +3,13 @@ import streamlit as st
 from datetime import date, timedelta
 import holidays as holidays_lib
 
-from daten import lade_config, speichere_config, lade_historie, speichere_historie, str_zu_datum, DATEN_VERZEICHNIS
+from daten import (
+    lade_config, speichere_config,
+    lade_plaene, speichere_plaene, gesamteinsaetze,
+    str_zu_datum, DATEN_VERZEICHNIS,
+)
+from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE
+from pdf_export import erstelle_pdf
 
 BUNDESLAENDER = {
     "BB": "Brandenburg", "BE": "Berlin", "BW": "Baden-Württemberg",
@@ -41,8 +47,88 @@ FEIERTAG_DE = {
 
 def _feiertag_name_de(name: str) -> str:
     return FEIERTAG_DE.get(name, name)
-from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE
-from pdf_export import erstelle_pdf
+
+
+def _letzter_tag_nach_3_monaten(start: date) -> date:
+    month = start.month + 3
+    year = start.year + (month - 1) // 12
+    month = ((month - 1) % 12) + 1
+    if month == 12:
+        return date(year, 12, 31)
+    return date(year, month + 1, 1) - timedelta(days=1)
+
+
+def render_plan_html(plan: list, config: dict) -> str:
+    gerichte = config.get("gerichte", {})
+    plan_index = {e["datum"]: e for e in plan}
+    erster = date.fromisoformat(plan[0]["datum"])
+    letzter = date.fromisoformat(plan[-1]["datum"])
+    montag_start = erster - timedelta(days=erster.weekday())
+    freitag_ende = letzter + timedelta(days=(4 - letzter.weekday()))
+    wochen: list[list[date]] = []
+    d = montag_start
+    while d <= freitag_ende:
+        wochen.append([d + timedelta(days=i) for i in range(5)])
+        d += timedelta(days=7)
+
+    wochentage_lang = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
+    kopf_zellen = ""
+    for i, tag in enumerate(wochentage_lang):
+        gericht = gerichte.get(str(i), "")
+        kopf_zellen += f'<th>{tag}<br><span class="gericht">{gericht}</span></th>'
+
+    zeilen_html = ""
+    for w_idx, woche in enumerate(wochen):
+        kw = woche[0].isocalendar()[1]
+        zellen = ""
+        for tag in woche:
+            datum_str = tag.isoformat()
+            eintrag = plan_index.get(datum_str)
+            if eintrag is None:
+                zellen += '<td class="leer"></td>'
+            elif eintrag.get("schliesszeit_name"):
+                sz_anzeige = eintrag["schliesszeit_name"]
+                zellen += (
+                    f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
+                    f'<span class="sonder">{sz_anzeige}</span></td>'
+                )
+            else:
+                kind_name = eintrag.get("kind", "")
+                anzeige = kind_name if kind_name else "–"
+                manuell = ' <span class="manuell">✏</span>' if eintrag.get("manuell_geaendert") else ""
+                zellen += (
+                    f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
+                    f'<span class="name">{anzeige}{manuell}</span></td>'
+                )
+        zeilenfarbe = "#F0F4F0" if w_idx % 2 == 0 else "#FFFFFF"
+        zeilen_html += (
+            f'<tr style="background-color:{zeilenfarbe};">'
+            f'<td class="kw-zelle">KW {kw}</td>{zellen}</tr>'
+        )
+
+    return f"""<style>
+  .kochplan {{ width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px; }}
+  .kochplan th {{
+    background-color: #4A7C59; color: white; padding: 8px 10px;
+    text-align: center; border: 1px solid #3a6347;
+  }}
+  .kochplan th .gericht {{ font-size: 0.78em; font-weight: normal; color: #CCEEDD; display: block; margin-top: 2px; }}
+  .kochplan td {{ padding: 6px 10px; vertical-align: top; border: 1px solid #CCCCCC; min-width: 110px; }}
+  .kochplan td.kw-zelle {{
+    background-color: #E8F0EA !important; font-weight: bold; color: #000000;
+    text-align: center; vertical-align: middle; white-space: nowrap;
+  }}
+  .kochplan td.leer {{ background-color: #F8F8F8; }}
+  .kochplan .datum {{ font-size: 0.75em; color: #999999; display: block; margin-bottom: 2px; }}
+  .kochplan .name {{ font-weight: bold; display: block; color: #000000; }}
+  .kochplan .sonder {{ font-style: italic; color: #AAAAAA; display: block; }}
+  .kochplan .manuell {{ color: #E07020; font-style: normal; font-size: 0.85em; }}
+</style>
+<table class="kochplan">
+  <thead><tr><th>Woche</th>{kopf_zellen}</tr></thead>
+  <tbody>{zeilen_html}</tbody>
+</table>"""
+
 
 st.set_page_config(page_title="Kindergarten Kochplan", page_icon="🍲", layout="wide")
 st.title("Kindergarten Kochplan")
@@ -53,8 +139,12 @@ if "config" not in st.session_state:
     st.session_state.config = lade_config()
 if "plan" not in st.session_state:
     st.session_state.plan = []
-if "historie" not in st.session_state:
-    st.session_state.historie = lade_historie()
+if "plan_zustand" not in st.session_state:
+    st.session_state.plan_zustand = "keiner"
+if "plaene" not in st.session_state:
+    st.session_state.plaene = lade_plaene()
+if "detail_plan_id" not in st.session_state:
+    st.session_state.detail_plan_id = None
 
 config = st.session_state.config
 
@@ -63,26 +153,10 @@ config = st.session_state.config
 with st.sidebar:
     st.header("Konfiguration")
 
-    # --- Planungszeitraum ---
-    with st.expander("Planungszeitraum", expanded=False):
-        startdatum = st.date_input(
-            "Von",
-            value=str_zu_datum(config["einstellungen"].get("startdatum", date.today().isoformat())),
-            key="startdatum",
-        )
-        enddatum = st.date_input(
-            "Bis",
-            value=str_zu_datum(config["einstellungen"].get("enddatum", date(date.today().year, 12, 31).isoformat())),
-            key="enddatum",
-        )
-        config["einstellungen"]["startdatum"] = startdatum.isoformat()
-        config["einstellungen"]["enddatum"] = enddatum.isoformat()
-
     # --- Schließzeiten ---
     with st.expander("Schließzeiten", expanded=False):
         schliesszeiten: list[dict] = config["einstellungen"].get("schliesszeiten", [])
 
-        # Bundesland + automatische Feiertagsgenerierung
         bundesland_optionen = list(BUNDESLAENDER.keys())
         bundesland_aktuell = config["einstellungen"].get("bundesland", "HE")
         bundesland_idx = bundesland_optionen.index(bundesland_aktuell) if bundesland_aktuell in bundesland_optionen else 0
@@ -119,7 +193,6 @@ with st.sidebar:
 
         st.divider()
 
-        # Manuell hinzufügen
         with st.form("neue_schliesszeit", clear_on_submit=True):
             sz_name = st.text_input("Bezeichnung (z.B. Sommerferien)")
             sz_von = st.date_input("Von", key="sz_von")
@@ -135,7 +208,6 @@ with st.sidebar:
                     config["einstellungen"]["schliesszeiten"] = schliesszeiten
                     st.success(f'"{sz_name}" hinzugefügt.')
 
-        # Liste anzeigen
         if schliesszeiten:
             st.write("**Eingetragene Schließzeiten:**")
             for i, sz in enumerate(sorted(schliesszeiten, key=lambda x: x["von"])):
@@ -252,14 +324,50 @@ with st.sidebar:
 tab_plan, tab_historie = st.tabs(["Plan", "Historie"])
 
 with tab_plan:
-    col_gen, col_pdf = st.columns([2, 1])
+    # Defaults für Planungszeitraum
+    n_plaene = len(st.session_state.plaene)
+    if st.session_state.plaene:
+        letzter_plan_bis = date.fromisoformat(st.session_state.plaene[-1]["bis"])
+        min_start = letzter_plan_bis + timedelta(days=1)
+    else:
+        min_start = date.today()
+
+    default_start = min_start
+    default_end = _letzter_tag_nach_3_monaten(default_start)
+
+    # Datum-Eingaben und Aktions-Buttons
+    col_von, col_bis, col_gen, col_pdf = st.columns([2, 2, 2, 2])
+
+    with col_von:
+        plan_von = st.date_input(
+            "Von",
+            value=default_start,
+            min_value=min_start,
+            key=f"plan_von_{n_plaene}",
+        )
+
+    with col_bis:
+        plan_bis = st.date_input(
+            "Bis",
+            value=default_end,
+            min_value=min_start,
+            key=f"plan_bis_{n_plaene}",
+        )
 
     with col_gen:
-        if st.button("Plan generieren", type="primary"):
-            start = str_zu_datum(config["einstellungen"]["startdatum"])
-            ende = str_zu_datum(config["einstellungen"]["enddatum"])
-            st.session_state.plan = generiere_plan(config, st.session_state.historie, start, ende)
-            st.success(f"Plan {start.strftime('%d.%m.%Y')} – {ende.strftime('%d.%m.%Y')} generiert.")
+        st.write("")  # vertical alignment
+        ist_entwurf = st.session_state.plan_zustand == "entwurf"
+        gen_label = "Plan generieren"
+        if st.button(
+            gen_label,
+            type="primary",
+            disabled=ist_entwurf,
+            help="Erst den aktuellen Entwurf publizieren oder verwerfen." if ist_entwurf else None,
+        ):
+            gesamt = gesamteinsaetze(st.session_state.plaene)
+            st.session_state.plan = generiere_plan(config, gesamt, plan_von, plan_bis)
+            st.session_state.plan_zustand = "entwurf"
+            st.success(f"Plan {plan_von.strftime('%d.%m.%Y')} – {plan_bis.strftime('%d.%m.%Y')} generiert.")
 
     plan = st.session_state.plan
 
@@ -273,6 +381,7 @@ with tab_plan:
         with col_pdf:
             einsaetze = berechne_einsaetze(plan)
             pdf_bytes = erstelle_pdf(plan, config, einsaetze)
+            st.write("")  # vertical alignment
             st.download_button(
                 "PDF herunterladen",
                 data=pdf_bytes,
@@ -280,103 +389,63 @@ with tab_plan:
                 mime="application/pdf",
             )
 
-        if st.button("Plan als Historie speichern"):
-            for name, anzahl in berechne_einsaetze(plan).items():
-                st.session_state.historie[name] = st.session_state.historie.get(name, 0) + anzahl
-            speichere_historie(st.session_state.historie)
-            st.success("Einsätze zur Historie hinzugefügt.")
-
-        # Plan anzeigen: wochenweise HTML-Tabelle
-        gerichte = config.get("gerichte", {})
-        plan_index = {e["datum"]: e for e in plan}
-
-        erster = date.fromisoformat(plan[0]["datum"])
-        letzter = date.fromisoformat(plan[-1]["datum"])
-        montag_start = erster - timedelta(days=erster.weekday())
-        freitag_ende = letzter + timedelta(days=(4 - letzter.weekday()))
-
-        wochen: list[list[date]] = []
-        d = montag_start
-        while d <= freitag_ende:
-            wochen.append([d + timedelta(days=i) for i in range(5)])
-            d += timedelta(days=7)
-
-        WOCHENTAGE_LANG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
-        kopf_zellen = ""
-        for i, tag in enumerate(WOCHENTAGE_LANG):
-            gericht = gerichte.get(str(i), "")
-            kopf_zellen += f'<th>{tag}<br><span class="gericht">{gericht}</span></th>'
-
-        zeilen_html = ""
-        for w_idx, woche in enumerate(wochen):
-            kw = woche[0].isocalendar()[1]
-            zellen = ""
-            for tag in woche:
-                datum_str = tag.isoformat()
-                eintrag = plan_index.get(datum_str)
-                if eintrag is None:
-                    zellen += '<td class="leer"></td>'
-                elif eintrag.get("schliesszeit_name"):
-                    sz_anzeige = eintrag["schliesszeit_name"]
-                    zellen += (
-                        f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
-                        f'<span class="sonder">{sz_anzeige}</span></td>'
-                    )
-                else:
-                    kind_name = eintrag.get("kind", "")
-                    anzeige = kind_name if kind_name else "–"
-                    manuell = ' <span class="manuell">✏</span>' if eintrag.get("manuell_geaendert") else ""
-                    zellen += (
-                        f'<td><span class="datum">{tag.strftime("%d.%m.%Y")}</span>'
-                        f'<span class="name">{anzeige}{manuell}</span></td>'
-                    )
-            zeilenfarbe = "#F0F4F0" if w_idx % 2 == 0 else "#FFFFFF"
-            zeilen_html += (
-                f'<tr style="background-color:{zeilenfarbe};">'
-                f'<td class="kw-zelle">KW {kw}</td>{zellen}</tr>'
+        # Status-Badge und Publish-Button
+        status_col, pub_col, discard_col = st.columns([4, 2, 2])
+        if st.session_state.plan_zustand == "entwurf":
+            status_col.markdown(
+                '<span style="background:#F0A500;color:white;padding:3px 10px;border-radius:4px;font-size:0.85em;">Entwurf</span>',
+                unsafe_allow_html=True,
             )
 
-        html = f"""
-<style>
-  .kochplan {{ width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px; }}
-  .kochplan th {{
-    background-color: #4A7C59; color: white; padding: 8px 10px;
-    text-align: center; border: 1px solid #3a6347;
-  }}
-  .kochplan th .gericht {{ font-size: 0.78em; font-weight: normal; color: #CCEEDD; display: block; margin-top: 2px; }}
-  .kochplan td {{ padding: 6px 10px; vertical-align: top; border: 1px solid #CCCCCC; min-width: 110px; }}
-  .kochplan td.kw-zelle {{
-    background-color: #E8F0EA !important; font-weight: bold; color: #000000;
-    text-align: center; vertical-align: middle; white-space: nowrap;
-  }}
-  .kochplan td.leer {{ background-color: #F8F8F8; }}
-  .kochplan .datum {{ font-size: 0.75em; color: #999999; display: block; margin-bottom: 2px; }}
-  .kochplan .name {{ font-weight: bold; display: block; color: #000000; }}
-  .kochplan .sonder {{ font-style: italic; color: #AAAAAA; display: block; }}
-  .kochplan .manuell {{ color: #E07020; font-style: normal; font-size: 0.85em; }}
-</style>
-<table class="kochplan">
-  <thead><tr><th>Woche</th>{kopf_zellen}</tr></thead>
-  <tbody>{zeilen_html}</tbody>
-</table>
-"""
-        st.markdown(html, unsafe_allow_html=True)
+        with pub_col:
+            if st.button("Plan publizieren", type="primary"):
+                from datetime import datetime as _dt
+                plan_id = f"{plan_von.isoformat()}_{plan_bis.isoformat()}_{_dt.now().strftime('%Y%m%dT%H%M%S')}"
+                st.session_state.plaene.append({
+                    "id": plan_id,
+                    "von": plan_von.isoformat(),
+                    "bis": plan_bis.isoformat(),
+                    "publiziert_am": _dt.now().isoformat(timespec="seconds"),
+                    "eintraege": st.session_state.plan,
+                })
+                speichere_plaene(st.session_state.plaene)
+                st.session_state.plan = []
+                st.session_state.plan_zustand = "keiner"
+                st.success("Plan publiziert.")
+                st.rerun()
+
+        with discard_col:
+            if st.button("Entwurf verwerfen"):
+                st.session_state.plan = []
+                st.session_state.plan_zustand = "keiner"
+                st.rerun()
+
+        # Plan-Ansicht
+        st.markdown(render_plan_html(plan, config), unsafe_allow_html=True)
 
         # Statistik
         st.divider()
         einsaetze_aktuell = berechne_einsaetze(plan)
-        historische = st.session_state.historie
+        gesamt_historisch = gesamteinsaetze(st.session_state.plaene)
+
         col_stat_titel, col_stat_toggle = st.columns([3, 1])
         col_stat_titel.subheader("Einsätze")
-        ansicht = col_stat_toggle.radio("Ansicht", ["Tabelle", "Diagramm"], horizontal=True, label_visibility="collapsed")
+        ansicht = col_stat_toggle.radio(
+            "Ansicht", ["Tabelle", "Diagramm"], horizontal=True, label_visibility="collapsed"
+        )
 
         statistik_zeilen = []
         for kind in config["kinder"]:
             name = kind["name"]
             aktuell = einsaetze_aktuell.get(name, 0)
-            gesamt = historische.get(name, 0) + aktuell
+            gesamt = gesamt_historisch.get(name, 0) + aktuell
             vorstand = "Ja" if kind.get("ist_vorstand") else "Nein"
-            statistik_zeilen.append({"Kind": name, "Aktueller Plan": aktuell, "Gesamt (inkl. Historie)": gesamt, "Vorstand": vorstand})
+            statistik_zeilen.append({
+                "Kind": name,
+                "Aktueller Plan": aktuell,
+                "Gesamt (inkl. Historie)": gesamt,
+                "Vorstand": vorstand,
+            })
 
         if statistik_zeilen:
             if ansicht == "Tabelle":
@@ -440,17 +509,49 @@ with tab_plan:
 
 
 with tab_historie:
-    st.header("Historische Einsätze")
-    historie = st.session_state.historie
-    if not historie:
-        st.info("Noch keine historischen Einsätze gespeichert.")
+    st.header("Publizierte Pläne")
+    plaene = st.session_state.plaene
+
+    if not plaene:
+        st.info("Noch keine publizierten Pläne vorhanden.")
     else:
-        for name, anzahl in sorted(historie.items(), key=lambda x: -x[1]):
-            st.write(f"**{name}**: {anzahl} Einsatz/Einsätze")
-    st.divider()
-    if st.button("Historie zurücksetzen", type="secondary"):
-        st.session_state.historie = {}
-        speichere_historie({})
-        st.success("Historie zurückgesetzt.")
+        for plan_eintrag in reversed(plaene):
+            pid = plan_eintrag["id"]
+            von_str = date.fromisoformat(plan_eintrag["von"]).strftime("%d.%m.%Y")
+            bis_str = date.fromisoformat(plan_eintrag["bis"]).strftime("%d.%m.%Y")
+            pub_str = plan_eintrag["publiziert_am"].replace("T", " ")
 
+            col_von_h, col_bis_h, col_pub_h, col_det, col_del = st.columns([2, 2, 3, 1, 1])
+            col_von_h.write(f"**Von:** {von_str}")
+            col_bis_h.write(f"**Bis:** {bis_str}")
+            col_pub_h.write(f"**Publiziert:** {pub_str}")
 
+            if col_det.button("Details", key=f"det_{pid}"):
+                if st.session_state.detail_plan_id == pid:
+                    st.session_state.detail_plan_id = None
+                else:
+                    st.session_state.detail_plan_id = pid
+
+            if col_del.button("Löschen", key=f"del_{pid}"):
+                st.session_state.plaene = [p for p in plaene if p["id"] != pid]
+                speichere_plaene(st.session_state.plaene)
+                if st.session_state.detail_plan_id == pid:
+                    st.session_state.detail_plan_id = None
+                st.rerun()
+
+            if st.session_state.detail_plan_id == pid:
+                st.markdown(render_plan_html(plan_eintrag["eintraege"], config), unsafe_allow_html=True)
+
+            st.divider()
+
+        # Gesamtübersicht
+        st.subheader("Gesamteinsätze")
+        gesamt = gesamteinsaetze(plaene)
+        if gesamt:
+            gesamt_zeilen = [
+                {"Kind": name, "Gesamteinsätze": anzahl}
+                for name, anzahl in sorted(gesamt.items(), key=lambda x: -x[1])
+            ]
+            st.table(gesamt_zeilen)
+        else:
+            st.info("Keine Einsätze in publizierten Plänen.")

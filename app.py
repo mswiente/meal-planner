@@ -362,11 +362,14 @@ with tab_plan:
 """
         st.markdown(html, unsafe_allow_html=True)
 
-        # Statistik-Tabelle
+        # Statistik
         st.divider()
         einsaetze_aktuell = berechne_einsaetze(plan)
         historische = st.session_state.historie
-        st.subheader("Einsätze")
+        col_stat_titel, col_stat_toggle = st.columns([3, 1])
+        col_stat_titel.subheader("Einsätze")
+        ansicht = col_stat_toggle.radio("Ansicht", ["Tabelle", "Diagramm"], horizontal=True, label_visibility="collapsed")
+
         statistik_zeilen = []
         for kind in config["kinder"]:
             name = kind["name"]
@@ -374,8 +377,15 @@ with tab_plan:
             gesamt = historische.get(name, 0) + aktuell
             vorstand = "Ja" if kind.get("ist_vorstand") else "Nein"
             statistik_zeilen.append({"Kind": name, "Aktueller Plan": aktuell, "Gesamt (inkl. Historie)": gesamt, "Vorstand": vorstand})
+
         if statistik_zeilen:
-            st.table(statistik_zeilen)
+            if ansicht == "Tabelle":
+                st.table(statistik_zeilen)
+            else:
+                chart_daten = {z["Kind"]: {"Aktueller Plan": z["Aktueller Plan"], "Gesamt": z["Gesamt (inkl. Historie)"]} for z in statistik_zeilen}
+                import pandas as pd
+                df = pd.DataFrame(chart_daten).T
+                st.bar_chart(df)
 
         # Manuelle Bearbeitung
         st.divider()

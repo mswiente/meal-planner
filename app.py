@@ -196,17 +196,22 @@ with st.sidebar:
                         key=f"wochentage_{idx}",
                     )
                     sperrzeiten = kind.get("sperrzeiten", [])
-                    neue_sperre = st.date_input("Sperrzeit hinzufügen", key=f"sperre_{idx}")
+                    sp_col1, sp_col2 = st.columns(2)
+                    sp_von = sp_col1.date_input("Von", key=f"sperre_von_{idx}")
+                    sp_bis = sp_col2.date_input("Bis", key=f"sperre_bis_{idx}")
                     if st.button("Sperrzeit eintragen", key=f"btn_sperre_{idx}"):
-                        if neue_sperre.isoformat() not in sperrzeiten:
-                            sperrzeiten.append(neue_sperre.isoformat())
-                            kind["sperrzeiten"] = sperrzeiten
+                        sperrzeiten.append({"von": sp_von.isoformat(), "bis": sp_bis.isoformat()})
+                        kind["sperrzeiten"] = sperrzeiten
                     if sperrzeiten:
                         st.write("Sperrzeiten:")
-                        for sp in sorted(sperrzeiten):
+                        for sp in sorted(sperrzeiten, key=lambda x: x["von"] if isinstance(x, dict) else x):
                             sc1, sc2 = st.columns([3, 1])
-                            sc1.write(sp)
-                            if sc2.button("✕", key=f"del_sp_{idx}_{sp}"):
+                            if isinstance(sp, dict):
+                                zeitraum = sp["von"] if sp["von"] == sp["bis"] else f"{sp['von']} – {sp['bis']}"
+                            else:
+                                zeitraum = sp
+                            sc1.write(zeitraum)
+                            if sc2.button("✕", key=f"del_sp_{idx}_{sp if isinstance(sp, str) else sp['von']}"):
                                 sperrzeiten.remove(sp)
                                 kind["sperrzeiten"] = sperrzeiten
                     if st.button("Kind entfernen", key=f"del_kind_{idx}"):

@@ -48,10 +48,11 @@ def generiere_plan(
             continue
 
         gericht = gerichte.get(str(wochentag), "")
+        datum_iso = aktuelles_datum.isoformat()
         sperrzeiten_kinder = {
             k["name"]
             for k in kinder
-            if aktuelles_datum.isoformat() in k.get("sperrzeiten", [])
+            if _in_sperrzeiten(datum_iso, k.get("sperrzeiten", []))
         }
         kandidaten = [
             k for k in kinder
@@ -77,6 +78,17 @@ def generiere_plan(
         aktuelles_datum += timedelta(days=1)
 
     return plan
+
+
+def _in_sperrzeiten(datum_iso: str, sperrzeiten: list) -> bool:
+    for sp in sperrzeiten:
+        if isinstance(sp, dict):
+            if sp["von"] <= datum_iso <= sp["bis"]:
+                return True
+        else:
+            if sp == datum_iso:
+                return True
+    return False
 
 
 def _ist_verfuegbar(

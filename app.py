@@ -20,6 +20,7 @@ FEIERTAG_DE = {
     "Easter Sunday": "Ostersonntag",
     "Easter Monday": "Ostermontag",
     "Labour Day": "Tag der Arbeit",
+    "Labor Day": "Tag der Arbeit",
     "Ascension Day": "Christi Himmelfahrt",
     "Whit Sunday": "Pfingstsonntag",
     "Whit Monday": "Pfingstmontag",

@@ -122,7 +122,7 @@ def erstelle_pdf(
         Paragraph(zeitraum, untertitel_stil),
     ]
     if logo_pfad and os.path.exists(logo_pfad):
-        logo_hoehe = 2.0 * cm
+        logo_hoehe = 1.0 * cm
         iw, ih = ImageReader(logo_pfad).getSize()
         logo_breite = logo_hoehe * (iw / ih)
         logo_img = Image(logo_pfad, height=logo_hoehe, width=logo_breite)

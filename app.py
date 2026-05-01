@@ -249,7 +249,7 @@ with st.sidebar:
 
 # === HAUPTBEREICH ===
 
-tab_plan, tab_historie, tab_statistik = st.tabs(["Plan", "Historie", "Statistik"])
+tab_plan, tab_historie = st.tabs(["Plan", "Historie"])
 
 with tab_plan:
     col_gen, col_pdf = st.columns([2, 1])
@@ -362,6 +362,21 @@ with tab_plan:
 """
         st.markdown(html, unsafe_allow_html=True)
 
+        # Statistik-Tabelle
+        st.divider()
+        einsaetze_aktuell = berechne_einsaetze(plan)
+        historische = st.session_state.historie
+        st.subheader("Einsätze")
+        statistik_zeilen = []
+        for kind in config["kinder"]:
+            name = kind["name"]
+            aktuell = einsaetze_aktuell.get(name, 0)
+            gesamt = historische.get(name, 0) + aktuell
+            vorstand = "Ja" if kind.get("ist_vorstand") else "Nein"
+            statistik_zeilen.append({"Kind": name, "Aktueller Plan": aktuell, "Gesamt (inkl. Historie)": gesamt, "Vorstand": vorstand})
+        if statistik_zeilen:
+            st.table(statistik_zeilen)
+
         # Manuelle Bearbeitung
         st.divider()
         kinder_namen = [""] + [k["name"] for k in config["kinder"]]
@@ -404,22 +419,3 @@ with tab_historie:
         st.success("Historie zurückgesetzt.")
 
 
-with tab_statistik:
-    st.header("Statistik")
-    plan = st.session_state.plan
-    if not plan:
-        st.info("Erst einen Plan generieren.")
-    else:
-        einsaetze = berechne_einsaetze(plan)
-        historische = st.session_state.historie
-        st.subheader("Einsätze im aktuellen Plan")
-        for kind in config["kinder"]:
-            name = kind["name"]
-            aktuell = einsaetze.get(name, 0)
-            gesamt = historische.get(name, 0) + aktuell
-            vorstand = " (Vorstand)" if kind.get("ist_vorstand") else ""
-            st.metric(
-                label=f"{name}{vorstand}",
-                value=f"{aktuell} aktuell",
-                delta=f"{gesamt} gesamt",
-            )

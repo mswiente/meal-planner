@@ -13,6 +13,33 @@ BUNDESLAENDER = {
     "SH": "Schleswig-Holstein", "SL": "Saarland", "SN": "Sachsen",
     "ST": "Sachsen-Anhalt", "TH": "Thüringen",
 }
+
+FEIERTAG_DE = {
+    "New Year's Day": "Neujahr",
+    "Good Friday": "Karfreitag",
+    "Easter Sunday": "Ostersonntag",
+    "Easter Monday": "Ostermontag",
+    "Labour Day": "Tag der Arbeit",
+    "Ascension Day": "Christi Himmelfahrt",
+    "Whit Sunday": "Pfingstsonntag",
+    "Whit Monday": "Pfingstmontag",
+    "Corpus Christi": "Fronleichnam",
+    "Assumption Day": "Mariä Himmelfahrt",
+    "German Unity Day": "Tag der Deutschen Einheit",
+    "Reformation Day": "Reformationstag",
+    "All Saints' Day": "Allerheiligen",
+    "Christmas Day": "1. Weihnachtstag",
+    "Second Day of Christmas": "2. Weihnachtstag",
+    "Epiphany": "Heilige Drei Könige",
+    "World Children's Day": "Weltkindertag",
+    "International Women's Day": "Internationaler Frauentag",
+    "Liberation Day": "Tag der Befreiung",
+    "Peace Festival": "Augsburger Friedensfest",
+}
+
+
+def _feiertag_name_de(name: str) -> str:
+    return FEIERTAG_DE.get(name, name)
 from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE
 from pdf_export import erstelle_pdf
 
@@ -72,10 +99,11 @@ with st.sidebar:
             value=date.today().year, step=1, key="feiertag_jahr",
         )
         if st.button("Feiertage generieren", key="btn_feiertage_gen"):
-            feiertage_dict = holidays_lib.Germany(subdiv=bl, years=int(feiertag_jahr), language="de")
+            feiertage_dict = holidays_lib.Germany(subdiv=bl, years=int(feiertag_jahr))
             bestehende_namen = {(sz["von"], sz["name"]) for sz in schliesszeiten}
             neu = 0
             for ft_datum, ft_name in sorted(feiertage_dict.items()):
+                ft_name = _feiertag_name_de(ft_name)
                 key = (ft_datum.isoformat(), ft_name)
                 if key not in bestehende_namen:
                     schliesszeiten.append({

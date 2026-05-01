@@ -196,6 +196,7 @@ with st.sidebar:
                         key=f"wochentage_{idx}",
                     )
                     sperrzeiten = kind.get("sperrzeiten", [])
+                    st.write("**Sperrzeiten**")
                     sp_col1, sp_col2 = st.columns(2)
                     sp_von = sp_col1.date_input("Von", key=f"sperre_von_{idx}")
                     sp_bis = sp_col2.date_input("Bis", key=f"sperre_bis_{idx}")

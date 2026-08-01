@@ -521,7 +521,7 @@ with tab_historie:
             bis_str = date.fromisoformat(plan_eintrag["bis"]).strftime("%d.%m.%Y")
             pub_str = plan_eintrag["publiziert_am"].replace("T", " ")
 
-            col_von_h, col_bis_h, col_pub_h, col_det, col_del = st.columns([2, 2, 3, 1, 1])
+            col_von_h, col_bis_h, col_pub_h, col_det, col_pdf_h, col_del = st.columns([2, 2, 3, 1, 1, 1])
             col_von_h.write(f"**Von:** {von_str}")
             col_bis_h.write(f"**Bis:** {bis_str}")
             col_pub_h.write(f"**Publiziert:** {pub_str}")
@@ -531,6 +531,16 @@ with tab_historie:
                     st.session_state.detail_plan_id = None
                 else:
                     st.session_state.detail_plan_id = pid
+
+            eintraege = plan_eintrag["eintraege"]
+            pdf_bytes_h = erstelle_pdf(eintraege, config, berechne_einsaetze(eintraege))
+            col_pdf_h.download_button(
+                "PDF",
+                data=pdf_bytes_h,
+                file_name=f"kochplan_{plan_eintrag['von']}_{plan_eintrag['bis']}.pdf",
+                mime="application/pdf",
+                key=f"pdf_{pid}",
+            )
 
             if col_del.button("Löschen", key=f"del_{pid}"):
                 st.session_state.plaene = [p for p in plaene if p["id"] != pid]

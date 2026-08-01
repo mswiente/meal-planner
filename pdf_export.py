@@ -14,7 +14,6 @@ from reportlab.platypus import (
     TableStyle,
     Paragraph,
     Spacer,
-    HRFlowable,
     Image,
 )
 
@@ -223,20 +222,6 @@ def erstelle_pdf(
     ]))
 
     inhalt.append(tabelle)
-
-    # Legende
-    inhalt.append(Spacer(1, 0.4 * cm))
-    inhalt.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CCCCCC")))
-    inhalt.append(Spacer(1, 0.2 * cm))
-
-    legende_stil = ParagraphStyle(
-        "Legende", parent=styles["Normal"], fontSize=7,
-        textColor=colors.HexColor("#666666"),
-    )
-    inhalt.append(Paragraph(
-        "Vorstandsmitglieder werden halb so oft eingeplant. Manuelle Anpassungen sind im System markiert.",
-        legende_stil,
-    ))
 
     doc.build(inhalt)
     return buffer.getvalue()

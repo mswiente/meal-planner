@@ -506,7 +506,7 @@ with tab_plan:
         # Manuelle Bearbeitung
         st.divider()
         kinder_namen = [""] + [k["name"] for k in config["kinder"]]
-        with st.expander("Plan manuell bearbeiten", expanded=False):
+        with st.expander("Plan manuell bearbeiten", expanded=False, key="manuell_bearbeiten_expander"):
             for idx, eintrag in enumerate(plan):
                 if eintrag.get("schliesszeit_name"):
                     continue
@@ -531,6 +531,7 @@ with tab_plan:
                         "bis": st.session_state.entwurf_bis.isoformat(),
                         "plan": plan,
                     })
+                    st.rerun()
                 if eintrag.get("manuell_geaendert"):
                     cols[4].markdown("✏️")
 

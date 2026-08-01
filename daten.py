@@ -6,6 +6,7 @@ from typing import Any
 DATEN_VERZEICHNIS = os.path.join(os.path.dirname(__file__), "daten")
 CONFIG_DATEI = os.path.join(DATEN_VERZEICHNIS, "config.json")
 PLAENE_DATEI = os.path.join(DATEN_VERZEICHNIS, "plaene.json")
+ENTWURF_DATEI = os.path.join(DATEN_VERZEICHNIS, "entwurf.json")
 
 STANDARD_CONFIG: dict[str, Any] = {
     "einstellungen": {
@@ -55,6 +56,24 @@ def speichere_plaene(plaene: list[dict[str, Any]]) -> None:
     _sicherstellen_verzeichnis()
     with open(PLAENE_DATEI, "w", encoding="utf-8") as f:
         json.dump(plaene, f, ensure_ascii=False, indent=2)
+
+
+def lade_entwurf() -> dict[str, Any] | None:
+    _sicherstellen_verzeichnis()
+    if not os.path.exists(ENTWURF_DATEI):
+        return None
+    with open(ENTWURF_DATEI, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def speichere_entwurf(entwurf: dict[str, Any] | None) -> None:
+    _sicherstellen_verzeichnis()
+    if entwurf is None:
+        if os.path.exists(ENTWURF_DATEI):
+            os.remove(ENTWURF_DATEI)
+        return
+    with open(ENTWURF_DATEI, "w", encoding="utf-8") as f:
+        json.dump(entwurf, f, ensure_ascii=False, indent=2)
 
 
 def gesamteinsaetze(plaene: list[dict[str, Any]]) -> dict[str, int]:

@@ -6,6 +6,7 @@ import holidays as holidays_lib
 from daten import (
     lade_config, speichere_config,
     lade_plaene, speichere_plaene, gesamteinsaetze,
+    lade_entwurf, speichere_entwurf,
     str_zu_datum, DATEN_VERZEICHNIS,
 )
 from planer import generiere_plan, berechne_einsaetze, validiere_plan, WOCHENTAGE
@@ -138,7 +139,14 @@ st.title("Kindergarten Kochplan")
 if "config" not in st.session_state:
     st.session_state.config = lade_config()
 if "plan" not in st.session_state:
-    st.session_state.plan = []
+    entwurf = lade_entwurf()
+    if entwurf:
+        st.session_state.plan = entwurf["plan"]
+        st.session_state.plan_zustand = "entwurf"
+        st.session_state.entwurf_von = date.fromisoformat(entwurf["von"])
+        st.session_state.entwurf_bis = date.fromisoformat(entwurf["bis"])
+    else:
+        st.session_state.plan = []
 if "plan_zustand" not in st.session_state:
     st.session_state.plan_zustand = "keiner"
 if "plaene" not in st.session_state:
@@ -335,6 +343,11 @@ with tab_plan:
     default_start = min_start
     default_end = _letzter_tag_nach_3_monaten(default_start)
 
+    if st.session_state.plan_zustand == "entwurf" and "entwurf_von" in st.session_state:
+        default_start = st.session_state.entwurf_von
+        default_end = st.session_state.entwurf_bis
+        min_start = min(min_start, default_start)
+
     # Datum-Eingaben und Aktions-Buttons
     col_von, col_bis, col_gen, col_pdf = st.columns([2, 2, 2, 2])
 
@@ -367,6 +380,13 @@ with tab_plan:
             gesamt = gesamteinsaetze(st.session_state.plaene)
             st.session_state.plan = generiere_plan(config, gesamt, plan_von, plan_bis)
             st.session_state.plan_zustand = "entwurf"
+            st.session_state.entwurf_von = plan_von
+            st.session_state.entwurf_bis = plan_bis
+            speichere_entwurf({
+                "von": plan_von.isoformat(),
+                "bis": plan_bis.isoformat(),
+                "plan": st.session_state.plan,
+            })
             st.success(f"Plan {plan_von.strftime('%d.%m.%Y')} – {plan_bis.strftime('%d.%m.%Y')} generiert.")
 
     plan = st.session_state.plan
@@ -409,6 +429,7 @@ with tab_plan:
                     "eintraege": st.session_state.plan,
                 })
                 speichere_plaene(st.session_state.plaene)
+                speichere_entwurf(None)
                 st.session_state.plan = []
                 st.session_state.plan_zustand = "keiner"
                 st.success("Plan publiziert.")
@@ -416,6 +437,7 @@ with tab_plan:
 
         with discard_col:
             if st.button("Entwurf verwerfen"):
+                speichere_entwurf(None)
                 st.session_state.plan = []
                 st.session_state.plan_zustand = "keiner"
                 st.rerun()
@@ -504,6 +526,11 @@ with tab_plan:
                 if neues_kind != aktuelles_kind:
                     plan[idx]["kind"] = neues_kind
                     plan[idx]["manuell_geaendert"] = True
+                    speichere_entwurf({
+                        "von": st.session_state.entwurf_von.isoformat(),
+                        "bis": st.session_state.entwurf_bis.isoformat(),
+                        "plan": plan,
+                    })
                 if eintrag.get("manuell_geaendert"):
                     cols[4].markdown("✏️")
 
